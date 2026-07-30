@@ -433,7 +433,7 @@ class Game {
     // 自适应渲染延迟: 按真实 RTT 动态调节缓冲大小(北京本地/同 WiFi 对战 RTT 仅 10~30ms,
     // 硬撑 100ms 缓冲是纯加难受; 高延迟(走中继)时才放大缓冲保「动画+位移永远一致」)
     const rttMs = (typeof Net !== 'undefined' && Net.getRtt) ? Net.getRtt() : 0;
-    this.interp.delay = rttMs <= 0 ? 0.07 : Math.max(0.04, Math.min(0.10, (rttMs / 1000) * 1.6));
+    this.interp.delay = rttMs <= 0 ? 0.07 : Math.max(0.03, Math.min(0.10, (rttMs / 1000) * 1.2));
     const buf = this.interp.buffer;
     if (buf.length === 0) return;
     const now = performance.now() / 1000;
@@ -456,7 +456,7 @@ class Game {
     if (Math.abs(dx) > 60 || Math.abs(dy) > 60) {
       foe.x = tx; foe.y = ty;
     } else {
-      const k = 1 - Math.exp(-dt * 18);
+      const k = 1 - Math.exp(-dt * 26);
       foe.x += dx * k;
       foe.y += dy * k;
     }
@@ -464,15 +464,28 @@ class Game {
     // 取较近一侧快照作为离散状态来源
     const sd = (f >= 0.5) ? b.d : a.d;
 
-    // 跳跃事件: 缓冲回放时检测 jumpSeq 递增, 仅触发一次起跳动画(一段/二段跳都判)
-    if (sd.js !== undefined && sd.js > foe.jumpSeq) {
+    // 状态切换检测: 仅在 state 实际变化或跳跃事件(jumpSeq 递增)时才「重置」本地动画时钟,
+    // 平时让对手动画以本机 60fps 速率推进(stateTime/frame 本地累加), 不再每帧被 30Hz
+    // 快照钉死 —— 修复「对手二段跳整体慢/跳帧」: 原逻辑每帧 foe.stateTime = sd.stt 把
+    // 动画锁在延迟后的量化值, 二段跳起跳本应 stateTime=0 重置, 却被立刻覆盖成 host 中途
+    // 的 stateTime, 相位错乱 → 视觉变慢。现改为与本地玩家同机制的「事件触发+本地推进」。
+    const jumpEvt = (sd.js !== undefined && sd.js > foe.jumpSeq);
+    const stateEvt = (sd.st !== foe.state);
+    if (jumpEvt) {
+      // 跳跃事件(一段/二段跳): 触发起跳动画 + 物理, 本地动画时钟归零重新播放
       foe.jumpSeq = sd.js;
       const isDouble = sd.jc !== undefined && sd.jc >= 2;
       foe.vy = isDouble ? -8.5 : -7.2;
       foe.onGround = false;
       if (foe.state !== 'jump') { foe.state = 'jump'; foe.hitApplied = false; }
-      foe.stateTime = 0; // 重置动画, 保证起跳帧可见
+      foe.stateTime = 0; foe.frame = 0;
+    } else if (stateEvt) {
+      // 普通状态切换(攻击/受击/落地/idle 等): 切换 state 并让本地动画从 0 正常播放
+      foe.state = sd.st; foe.hitApplied = false;
+      foe.stateTime = 0; foe.frame = 0;
     }
+    // 本地推进对手动画时钟(替代原每帧覆盖快照值, 解决对手动画慢/跳帧)
+    foe.stateTime += dt; foe.frame += 1;
 
     // 受伤 FX 与可见血量同步(用回放后的 hp 比较)
     if (this.interp.prevFoeHp !== undefined && this.interp.prevFoeHp - sd.hp >= 4) {
@@ -483,9 +496,6 @@ class Game {
 
     foe.facing = sd.f;
     foe.hp = sd.hp;
-    if (foe.state !== sd.st) { foe.state = sd.st; foe.hitApplied = false; }
-    foe.stateTime = sd.stt;
-    foe.frame = sd.fr;
     foe.flash = sd.fl ? 0.18 : 0;
     foe.cooldown = sd.cd;
     foe.defending = sd.df;
