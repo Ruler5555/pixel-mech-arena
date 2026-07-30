@@ -684,22 +684,24 @@ button:active:not(:disabled) { transform: translateY(2px); }
 }
 #game { display: block; width: 100%; height: auto; image-rendering: pixelated; background: #000; }
 
-/* 控制簇: 延迟 + 模式标签 + 退出键 —— 流式布局的一行,
-   位于顶部常驻条(#persistEdge)与血条 HUD 之间, 靠右; 游戏画面和血量信息随之下移 */
+/* 控制簇: 延迟 + 模式标签 + 退出键 —— 绝对定位于舞台(stage-wrap)右上角,
+   浮在画布上方, 不再影响 HUD/画面流式布局; 恢复 v93 时代的旧布局 */
 .top-cluster {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 35;
   display: flex;
   align-items: center;
-  justify-content: flex-end;
   gap: 6px;
   padding: 5px 8px;
-  margin-bottom: 6px;
   background: rgba(20,20,50,0.6);
   border: 2px solid var(--border);
   border-radius: 10px;
   box-shadow: 0 0 0 2px var(--panel2);
-  width: fit-content;
-  margin-left: auto;
+  pointer-events: none;
 }
+.top-cluster > * { pointer-events: auto; }
 .mode-tag { font-size: 7px; color: var(--dim); letter-spacing: 1px; }
 .rtt-tag { font-size: 7px; letter-spacing: 1px; color: var(--dim); min-width: 32px; text-align: right; font-variant-numeric: tabular-nums; }
 .rtt-tag.good { color: #4ade80; }
