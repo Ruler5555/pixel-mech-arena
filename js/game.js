@@ -280,10 +280,7 @@ class Game {
           if (this.p1.hp > this.p2.hp) winner = 1;
           else if (this.p2.hp > this.p1.hp) winner = 2;
           else {
-            // 血量相同(含盾反同时受伤): 比本回合累计受伤, 受伤多者判负
-            if (this.p1.dmgTaken > this.p2.dmgTaken) winner = 2;
-            else if (this.p2.dmgTaken > this.p1.dmgTaken) winner = 1;
-            else winner = 0; // 完全相等才平局
+            winner = 0; // 血量相同 -> 平局(已移除「同受伤判负」机制)
           }
         }
         if (winner === 1) this.winsP1++;
@@ -540,7 +537,6 @@ class Game {
       if (result < 0) {
         const reflected = Math.round(hb.dmg * 0.5); // 反伤 50%(保持), 攻击方承担
         attacker.hp = Math.max(0, attacker.hp - reflected);
-        attacker.dmgTaken += reflected; // 计入攻击方受伤(用于同血平局判定)
         attacker.flash = 0.15;
         attacker.vx += (attacker.x >= defender.x ? 1 : -1) * 0.5;
         if (attacker.hp <= 0) { attacker.setState('ko'); attacker.vy = 3; }

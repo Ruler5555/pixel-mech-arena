@@ -82,8 +82,10 @@ const Net = (() => {
         _startKeepAlive();
         resolve(code);
       };
+      let relayStarted = false;
       const toRelay = () => {
-        if (resolved) return;
+        if (relayStarted) return;
+        relayStarted = true;
         progress('P2P 信令不可用, 切换中继模式...');
         mode = 'relay';
         relayTopic = 'pma26/' + roomCode;
@@ -99,6 +101,10 @@ const Net = (() => {
       peer.on('open', () => {
         progress('信令已就绪, 等待对手...');
         finish(roomCode);
+        // [跨网兜底] 信令已就绪但 6s 内无对手经 P2P 连入(多为跨网/对称 NAT 穿透失败),
+        // 自动转中继, 保证「不同网络」也能连上(中继为海外 broker, 延迟较高但可用)
+        // 同网/可直连的跨网会在 1s 内 P2P 连上, 本定时器检测到 conn.open 即不触发, 不影响体感
+        connectDeadline = setTimeout(() => { if (!conn || !conn.open) toRelay(); }, 6000);
       });
 
       peer.on('connection', (c) => {
@@ -204,6 +210,10 @@ const Net = (() => {
 
   // 序号判定: 只接受比已见更新的消息; 对端刷新页面后序号会从头开始, 差距悬殊时视为新会话
   function _acceptSeq(msg) {
+    // 控制/握手消息(ping/pong/hello/world)幂等, 不参与去重 —— 否则会因两台机器
+    // 各自独立的 sendSeq 计数器, 导致对端回的 pong 序号偏小被当「过期包」丢弃,
+    // RTT 永远测不出(右上角一直显示 …)
+    if (msg.t === 'ping' || msg.t === 'pong' || msg.t === 'hello' || msg.t === 'world') return true;
     if (msg.q === undefined) return true; // 兼容无序号的旧客户端
     if (msg.q > lastRecvSeq) { lastRecvSeq = msg.q; return true; }
     if (lastRecvSeq - msg.q > 5000) { lastRecvSeq = msg.q; return true; } // 对端重启

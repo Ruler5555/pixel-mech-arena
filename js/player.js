@@ -22,7 +22,6 @@ class Mech {
 
     this.maxHP = 100;
     this.hp = 100;
-    this.dmgTaken = 0; // 本回合累计受伤(用于回合结束平局判定: 受伤多者负)
 
     // 物理
     this.vx = 0;
@@ -86,14 +85,12 @@ class Mech {
     if (this.defending && this.state === 'defend') {
       const taken = dmg * 0.2; // 盾牌减伤 80%, 仅承受 20%(内部保留小数, 显示时四舍五入)
       this.hp = Math.max(0, this.hp - taken);
-      this.dmgTaken += taken;
       this.flash = 0.12;
       // 防御时仍受小幅击退但不进入 hurt
       this.vx += (this.x >= fromX ? 1 : -1) * 0.6;
       return -taken; // 负值表示被防御
     }
     this.hp = Math.max(0, this.hp - dmg);
-    this.dmgTaken += dmg;
     this.flash = 0.18;
     // 击退
     this.vx += (this.x >= fromX ? 1 : -1) * 2.2;
