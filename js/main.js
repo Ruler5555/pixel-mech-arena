@@ -368,6 +368,7 @@
 
   function backToLobby() {
     resetRematchState();
+    exitConfirmMode = false; // 复位, 防止退出确认状态泄漏导致退出键失效
     game.stop();
     Net.close();
     hideRoomLobby();
@@ -448,9 +449,9 @@
     else if (s === 'matchEnd') {
       const champ = game.winsP1 >= 2 ? (hudP1Name.textContent + ' 获胜') : (hudP2Name.textContent + ' 获胜');
       if (game.mode === 'offline') {
-        // 移动端没有键盘, 不显示 R/ESC 提示
+        // 移动端没有键盘, 不显示 R/ESC 提示; 加返回大厅按钮(移动端无 ESC)
         const hint = IS_TOUCH_UI ? '' : '\n\n按 R 重开对局\n按 ESC 返回大厅';
-        showOverlay('比赛结束', champ + hint, '再来一局');
+        showOverlay('比赛结束', champ + hint, '再来一局', { cancelable: true, cancelLabel: '返回大厅' });
       } else {
         // 联机: 双方确认后才重开, 超时自动回大厅
         startRematchFlow(champ);
@@ -483,13 +484,9 @@
     }
   };
 
-  // 开始/再来一局按钮
-  let _btnHandled = false;
+  // 开始/再来一局按钮(只绑 click: 移动端无 300ms 延迟, 且保证 :active 反馈与单次触发)
   const onStart = (e) => {
     e.preventDefault();
-    if (_btnHandled) return;
-    _btnHandled = true;
-    setTimeout(() => { _btnHandled = false; }, 300);
     if (exitConfirmMode) {
       exitConfirmMode = false;
       if (game.onNetEvent) game.onNetEvent('leave');
@@ -500,24 +497,20 @@
     if (game.state === 'matchEnd' || game.state === 'ready') game.resetMatch();
   };
   startBtn.addEventListener('click', onStart);
-  startBtn.addEventListener('pointerdown', onStart);
 
   // 退出按钮
   const onExit = (e) => {
     e.preventDefault();
     if (exitConfirmMode) return;
     exitConfirmMode = true;
-    if (game.mode === 'offline') game.stop();
+    game.stop(); // 所有模式暂停对局, 防止确认期间被攻击(硬约束)
     showOverlay('退出游戏', '确定要离开当前房间?\n\n将返回大厅,对手会断开', '确认退出',
       { cancelable: true, cancelLabel: '继续游戏' });
   };
 
   // 移动端独立退出按钮(复用 onExit 逻辑, 弹确认对话框并暂停游戏)
   const exitMobileBtn = document.getElementById('exitMobileBtn');
-  if (exitMobileBtn) {
-    exitMobileBtn.addEventListener('click', onExit);
-    exitMobileBtn.addEventListener('pointerdown', onExit);
-  }
+  if (exitMobileBtn) exitMobileBtn.addEventListener('click', onExit);
 
   // ===== 大厅按钮 =====
   btnOffline.addEventListener('click', () => {
@@ -559,23 +552,19 @@
     }
   }
 
-  // 返回大厅/取消
+  // 返回大厅/取消(只绑 click)
   const onCancel = (e) => {
     e.preventDefault();
-    if (_btnHandled) return;
-    _btnHandled = true;
-    setTimeout(() => { _btnHandled = false; }, 300);
     if (exitConfirmMode) {
       exitConfirmMode = false;
       hideOverlay();
-      if (game.mode === 'offline') game.start();
+      game.start(); // 所有模式恢复对局
       return;
     }
     backToLobby();
     setStatus('');
   };
   cancelBtn.addEventListener('click', onCancel);
-  cancelBtn.addEventListener('pointerdown', onCancel);
 
   btnJoin.addEventListener('click', async () => {
     const code = (roomInput.value || '').trim();
@@ -698,14 +687,14 @@
 
   // ===== 更新公告: 点击版本号显示近三次更新(倒序: 最新在前; 每条用短句概括改动, 一点一换行; 每次发版须 prepend 一条真实版本) =====
   const CHANGELOG = [
+    ['v93', [
+      '修复点击/触控bug'
+    ]],
     ['v90', [
       '红蓝活泼UI重做'
     ]],
     ['v89', [
       '修复更新公告多显示版本'
-    ]],
-    ['v88', [
-      '修复对手动画慢/跳帧'
     ]]
   ];
   const versionTag = document.getElementById('versionTag');

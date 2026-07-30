@@ -122,7 +122,7 @@
   if (moveZone) {
     moveZone.addEventListener('pointerdown', stickStart);
     moveZone.addEventListener('pointermove', stickMove);
-    ['pointerup', 'pointercancel', 'pointerleave'].forEach((ev) => {
+    ['pointerup', 'pointercancel'].forEach((ev) => {
       moveZone.addEventListener(ev, stickEnd);
     });
   }
@@ -139,7 +139,7 @@
     start(act, e.pointerId);
   });
 
-  ['pointerup', 'pointercancel', 'pointerleave'].forEach((ev) => {
+  ['pointerup', 'pointercancel'].forEach((ev) => {
     container.addEventListener(ev, (e) => {
       if (active.has(e.pointerId)) {
         e.preventDefault();
@@ -158,7 +158,7 @@
   // 注意: 不要阻止 .overlay 内按钮(否则"再来一局"点不了)
   ['touchstart', 'touchmove', 'touchend', 'gesturestart'].forEach((ev) => {
     document.addEventListener(ev, (e) => {
-      if (e.target.closest && e.target.closest('.tbtn, .move-zone, .exit-mobile-btn, .stage-wrap, #game')) {
+      if (e.target.closest && e.target.closest('.tbtn, .move-zone, .stage-wrap, #game')) {
         e.preventDefault();
       }
     }, { passive: false });

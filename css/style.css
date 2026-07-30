@@ -97,6 +97,7 @@ body {
   box-shadow: 0 0 0 2px var(--panel);
 }
 .edge-btn:hover { color: var(--blue); border-color: var(--blue); }
+.edge-btn:active { transform: translateY(2px); filter: brightness(1.25); }
 .version-tag {
   font-size: 8px;
   color: var(--dim);
@@ -107,6 +108,7 @@ body {
   -webkit-user-select: none;
 }
 .version-tag:hover { color: var(--gold); }
+.version-tag:active { color: var(--blue); transform: translateY(1px); }
 
 /* ===== 更新公告弹层(点击版本号) ===== */
 .changelog-pop {
@@ -621,6 +623,9 @@ body {
 .room-btn.cancel { color: var(--dim); background: transparent; border-color: var(--panel2); box-shadow: none; }
 .room-btn.cancel:hover { color: var(--red-lt); border-color: var(--red-dk); }
 
+/* 游戏区: 顶部留出常驻边缘条(#persistEdge 高 38px)的空间, 避免 HUD 被遮挡(恢复旧版干净观感) */
+#gameWrap { padding-top: 44px; }
+
 /* ===== HUD ===== */
 #hud {
   display: grid;
@@ -710,7 +715,7 @@ body {
   justify-content: center;
   background: rgba(10,10,26,0.85);
   backdrop-filter: blur(2px);
-  z-index: 30;
+  z-index: 40;
 }
 .overlay.hidden { display: none; }
 .overlay-box {
@@ -735,6 +740,7 @@ body {
   cursor: pointer;
 }
 #startBtn:hover { filter: brightness(1.1); }
+#startBtn:active { transform: translateY(2px); filter: brightness(1.15); }
 .cancel-btn {
   font-size: 8px;
   letter-spacing: 1px;
@@ -747,6 +753,7 @@ body {
   margin-top: 10px;
 }
 .cancel-btn:hover { color: var(--red-lt); border-color: var(--red-dk); }
+.cancel-btn:active { transform: translateY(2px); color: var(--red-lt); border-color: var(--red-dk); }
 
 /* ===== Controls ===== */
 .controls { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 12px; }
