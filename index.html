@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#1a1a2e">
+<meta name="format-detection" content="telephone=no">
+<title>PIXEL MECH ARENA · 像素机甲竞技场</title>
+<link rel="stylesheet" href="css/style.css?v=27">
+</head>
+<body>
+<div id="app">
+
+  <!-- ===== 登录界面 ===== -->
+  <div id="authScreen">
+    <div class="auth-box">
+      <div class="auth-logo">
+        <h1>PIXEL MECH<span class="hl"> ARENA</span></h1>
+        <p class="sub">像素机甲竞技场</p>
+      </div>
+      <div id="authForm">
+        <div class="auth-tabs">
+          <button class="auth-tab active" data-tab="login">登录</button>
+          <button class="auth-tab" data-tab="register">注册</button>
+        </div>
+        <div id="authLogin" class="auth-panel">
+          <input type="text" id="loginName" class="auth-input" placeholder="用户名" maxlength="12">
+          <input type="password" id="loginPass" class="auth-input" placeholder="密码" maxlength="20">
+          <button id="btnLogin" class="auth-submit">登录</button>
+        </div>
+        <div id="authRegister" class="auth-panel hidden">
+          <input type="text" id="regName" class="auth-input" placeholder="用户名 (3-12字)" maxlength="12">
+          <input type="password" id="regPass" class="auth-input" placeholder="密码 (4-20字)" maxlength="20">
+          <input type="password" id="regPass2" class="auth-input" placeholder="确认密码" maxlength="20">
+          <button id="btnRegister" class="auth-submit">注册</button>
+        </div>
+        <div id="authStatus" class="auth-status"></div>
+      </div>
+      <button id="btnGuest" class="auth-guest">游客模式</button>
+    </div>
+  </div>
+
+  <!-- ===== 主菜单/大厅 ===== -->
+  <div id="lobby" class="hidden">
+    <span class="version-tag">v27</span>
+
+    <!-- 玩家信息条 -->
+    <div class="player-bar">
+      <div class="player-info">
+        <span class="player-name" id="lobbyPlayerName">玩家</span>
+        <span class="player-id" id="lobbyPlayerId">PMA-XXXXXX</span>
+      </div>
+      <button id="btnLogout" class="bar-btn">登出</button>
+    </div>
+
+    <div class="lobby-content">
+      <!-- 左侧: 房间操作 -->
+      <div class="lobby-main">
+        <div class="lobby-box">
+          <h2 class="lobby-title">联机大厅</h2>
+          <p class="lobby-tip">与朋友对战,无需同一网络</p>
+
+          <button id="btnHost" class="lobby-btn primary">创建房间</button>
+          <div class="lobby-sep">— 或 —</div>
+          <div class="lobby-join">
+            <input id="roomInput" class="lobby-input" inputmode="numeric" maxlength="6" placeholder="输入房号">
+            <button id="btnJoin" class="lobby-btn">加入</button>
+          </div>
+          <button id="btnOffline" class="lobby-btn ghost">单人 vs AI(离线)</button>
+          <div id="lobbyStatus" class="lobby-status"></div>
+        </div>
+
+        <div class="lobby-help-row">
+          <details class="lobby-help">
+            <summary>连不上怎么办?</summary>
+            <p>· 「创建房间」会自动选最快模式(P2P/中继)</p>
+            <p>· 数秒内未连上会自动并行启动中继</p>
+            <p>· 网络抖动时会自动重连,不用退出去</p>
+            <p class="warn-text">· 中继模式为公共信道,请勿在对局中输入隐私信息</p>
+          </details>
+          <details class="lobby-help">
+            <summary>游戏规则</summary>
+            <p>· 先胜 2 局者赢得整场对决</p>
+            <p>· 60 秒倒计时,时间到血量高者胜</p>
+            <p>· 轻击快但伤害低,重击慢但伤害高</p>
+            <p>· 防御可减伤 60%,但无法移动</p>
+            <p>· 键盘: A/D 左右 W 跳 J 轻击 K 重击 L 防御</p>
+            <p>· 移动端: 左下方向 右下按键</p>
+          </details>
+        </div>
+      </div>
+
+      <!-- 右侧: 世界频道 -->
+      <div class="world-panel">
+        <div class="world-header">
+          <span class="world-title">世界频道</span>
+          <span class="world-count" id="worldCount">0 个房间</span>
+        </div>
+        <div class="world-list" id="worldList">
+          <div class="world-empty">暂无公开房间<br>创建房间后可分享到世界</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 房间等待大厅 ===== -->
+  <div id="roomLobby" class="hidden">
+    <div class="room-lobby-box">
+      <h2 class="room-title">等待大厅</h2>
+      <div class="room-code-display">
+        <div class="room-code-label">房间号</div>
+        <div class="room-code" id="roomLobbyCode">------</div>
+      </div>
+      <div class="room-players">
+        <div class="room-player-slot" id="slotP1">
+          <div class="slot-icon blue">P1</div>
+          <div class="slot-name" id="slotP1Name">等待中...</div>
+          <div class="slot-status">房主</div>
+        </div>
+        <div class="vs-divider">VS</div>
+        <div class="room-player-slot" id="slotP2">
+          <div class="slot-icon red">P2</div>
+          <div class="slot-name" id="slotP2Name">等待中...</div>
+          <div class="slot-status" id="slotP2Status">等待加入</div>
+        </div>
+      </div>
+      <div class="room-actions">
+        <button id="btnShareWorld" class="room-btn share">分享到世界</button>
+        <button id="btnRoomStart" class="room-btn primary hidden">开始对战</button>
+        <button id="btnRoomCancel" class="room-btn cancel">返回大厅</button>
+      </div>
+      <div id="roomLobbyStatus" class="lobby-status"></div>
+    </div>
+  </div>
+
+  <!-- ===== 游戏区(联机/离线共用) ===== -->
+  <div id="gameWrap" class="hidden">
+    <div id="hud">
+      <div class="player-hud left">
+        <div class="name"><span id="hudP1Name">BLUE-01</span> <span class="role" id="roleP1">玩家</span></div>
+        <div class="hp-bar"><div class="hp-fill blue" id="hpP1"></div></div>
+        <div class="wins" id="winsP1">○ ○</div>
+      </div>
+      <div class="round-info">
+        <div class="round-label">ROUND</div>
+        <div class="round-num" id="roundNum">1</div>
+        <div class="timer" id="timer">60</div>
+        <div class="net-status" id="netStatus">●</div>
+      </div>
+      <div class="player-hud right">
+        <div class="name"><span class="role" id="roleP2">AI</span> <span id="hudP2Name">RED-X</span></div>
+        <div class="hp-bar"><div class="hp-fill red" id="hpP2"></div></div>
+        <div class="wins" id="winsP2">○ ○</div>
+      </div>
+    </div>
+
+    <div class="game-toolbar">
+      <span id="gameModeTag" class="mode-tag">离线</span>
+      <div class="toolbar-actions">
+        <button id="resyncBtn" class="resync-btn" aria-label="刷新对局">↻ 刷新</button>
+        <button id="exitBtn" class="exit-btn" aria-label="退出房间">✕ 退出</button>
+      </div>
+    </div>
+    <div class="stage-wrap">
+      <canvas id="game" width="640" height="360"></canvas>
+      <div id="overlay" class="overlay hidden">
+        <div class="overlay-box">
+          <h2 id="overlayTitle">READY?</h2>
+          <p id="overlayText"></p>
+          <button id="startBtn">开始对战</button>
+          <button id="cancelBtn" class="cancel-btn hidden">返回大厅</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="touchControls" class="touch-controls">
+      <div class="dpad">
+        <button class="tbtn pad left"  data-act="left"  aria-label="左">◀</button>
+        <button class="tbtn pad right" data-act="right" aria-label="右">▶</button>
+      </div>
+      <div class="action-cluster">
+        <button class="tbtn act defend" data-act="defend" aria-label="防御">防</button>
+        <button class="tbtn act jump"   data-act="jump"   aria-label="跳跃">跳</button>
+        <button class="tbtn act atkH"   data-act="atkH"   aria-label="重攻击">重击</button>
+        <button class="tbtn act atkL main" data-act="atkL" aria-label="轻攻击">轻击</button>
+      </div>
+    </div>
+
+    <div class="controls">
+      <div class="ctrl"><b>A/D</b> 移动</div>
+      <div class="ctrl"><b>W</b> 跳</div>
+      <div class="ctrl"><b>J</b> 轻攻击</div>
+      <div class="ctrl"><b>K</b> 重攻击</div>
+      <div class="ctrl"><b>L</b> 防御</div>
+      <div class="ctrl"><b>ESC</b> 离开</div>
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script src="https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js"></script>
+<script src="js/auth.js?v=27"></script>
+<script src="js/world.js?v=27"></script>
+<script src="js/input.js?v=27"></script>
+<script src="js/touch.js?v=27"></script>
+<script src="js/sprite.js?v=27"></script>
+<script src="js/player.js?v=27"></script>
+<script src="js/net.js?v=27"></script>
+<script src="js/game.js?v=27"></script>
+<script src="js/main.js?v=27"></script>
+</body>
+</html>
