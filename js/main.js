@@ -140,12 +140,14 @@
     roomLobby.classList.add('hidden');
     gameWrap.classList.add('hidden');
     onlineHub.classList.add('hidden');
+    leaveGame();
   }
   function showLobby() {
     authScreen.classList.add('hidden');
     roomLobby.classList.add('hidden');
     gameWrap.classList.add('hidden');
     onlineHub.classList.add('hidden');
+    leaveGame();
     lobby.classList.remove('hidden');
     if (currentPlayer) {
       lobbyPlayerName.textContent = currentPlayer.name;
@@ -161,6 +163,7 @@
     roomLobby.classList.add('hidden');
     gameWrap.classList.add('hidden');
     onlineHub.classList.remove('hidden');
+    leaveGame();
   }
 
   function authErr(msg) {
@@ -287,6 +290,7 @@
     gameWrap.classList.add('hidden');
     roomLobby.classList.remove('hidden');
     onlineHub.classList.add('hidden');
+    leaveGame();
     roomLobbyCode.textContent = code;
     slotP1Name.textContent = currentPlayer ? currentPlayer.name : '玩家';
     slotP2Name.textContent = '等待中...';
@@ -353,6 +357,10 @@
     roomLobby.classList.add('hidden');
     onlineHub.classList.add('hidden');
     gameWrap.classList.remove('hidden');
+    document.body.classList.add('in-game'); // CSS 切换: 隐藏 persistEdge, topCluster 升为顶栏
+  }
+  function leaveGame() {
+    document.body.classList.remove('in-game');
   }
   function showOverlay(title, text, btn, opts) {
     opts = opts || {};
@@ -373,6 +381,7 @@
     Net.close();
     hideRoomLobby();
     gameWrap.classList.add('hidden');
+    leaveGame();
     lobby.classList.remove('hidden');
     Input.clear();
     btnHost.disabled = false;
@@ -687,16 +696,14 @@
 
   // ===== 更新公告: 点击版本号显示近三次更新(倒序: 最新在前; 每条用短句概括改动, 一点一换行; 每次发版须 prepend 一条真实版本) =====
   const CHANGELOG = [
+    ['v99', [
+      '对局时移除顶端常驻条, 退出/延迟/模式信息升为顶栏'
+    ]],
     ['v98', [
       '恢复延迟/模式/退出簇到画布右上角(旧布局)'
     ]],
     ['v97', [
       '退出键移回顶部条与血条之间'
-    ]],
-    ['v96', [
-      '修复顶部条/连不上键点不开与闪动',
-      '修复退出确认键无反应',
-      '修复对战界面布局重叠'
     ]]
   ];
   const versionTag = document.getElementById('versionTag');
