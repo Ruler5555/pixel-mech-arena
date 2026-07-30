@@ -677,19 +677,14 @@
 
   // ===== 更新公告: 点击版本号显示近三次更新(倒序: 最新在前; 每条用短句概括改动, 一点一换行; 每次发版须 prepend 一条真实版本) =====
   const CHANGELOG = [
+    ['v89', [
+      '修复更新公告多显示版本'
+    ]],
     ['v88', [
       '修复对手动画慢/跳帧'
     ]],
     ['v87', [
       '移除刷新按键'
-    ]],
-    ['v86', [
-      '修复客户端提前进图'
-    ]],
-    ['v84', [
-      '免费TURN打通对称NAT',
-      '修复同网盲转中继',
-      '中继双服务器备份'
     ]]
   ];
   const versionTag = document.getElementById('versionTag');
@@ -698,7 +693,7 @@
   if (lobbyVersion && versionTag) lobbyVersion.textContent = versionTag.textContent; // 大厅静态版本号与登录界面同步
   if (versionTag && changelogPop) {
     changelogPop.innerHTML = '<div class="cl-title">更新公告</div>' +
-      CHANGELOG.map(c => '<div class="cl-item"><span class="cl-ver">' + c[0] + '</span><div class="cl-points">' +
+      CHANGELOG.slice(0, 3).map(c => '<div class="cl-item"><span class="cl-ver">' + c[0] + '</span><div class="cl-points">' +
         c[1].map(p => '<div class="cl-pt">· ' + p + '</div>').join('') +
         '</div></div>').join('');
     versionTag.addEventListener('click', (e) => {
