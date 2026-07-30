@@ -549,6 +549,84 @@ button:active:not(:disabled) { transform: translateY(2px); }
 .world-item-name { font-size: 7px; color: var(--dim); }
 .world-item-time { font-size: 6px; color: var(--dim); opacity: 0.6; margin-top: 3px; }
 
+/* ===== 玩法选择屏(Hub → 副本 → 选择模式) ===== */
+#modeSelect {
+  display: flex;
+  flex-direction: column;
+  padding: 50px 16px 24px;
+  animation: fadeIn 0.4s ease-out;
+}
+.ms-top {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  margin-bottom: 16px;
+}
+.ms-top .bar-btn { justify-self: start; }
+.ms-title { font-size: 13px; color: var(--blue); text-shadow: 2px 2px 0 var(--border); letter-spacing: 2px; text-align: center; }
+.ms-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  max-width: 360px;
+  margin: 0 auto;
+}
+.ms-mode-btn {
+  width: 100%;
+  max-width: 360px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 22px;
+  background: var(--panel);
+  border: 3px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 0 0 2px var(--panel2), 0 4px 0 var(--border);
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.08s, filter 0.08s;
+  color: var(--text);
+}
+.ms-mode-btn.blue { border-color: var(--blue-dk); box-shadow: 0 0 0 2px var(--blue-dk), 0 4px 0 var(--border); }
+.ms-mode-btn:active:not(:disabled) { transform: translateY(2px); filter: brightness(1.2); }
+.ms-mode-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.ms-mode-ico {
+  font-size: 28px;
+  flex: 0 0 auto;
+  filter: drop-shadow(2px 2px 0 var(--border));
+}
+.ms-mode-txt {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.ms-mode-txt .hb-txt {
+  font-size: 12px;
+  color: var(--blue);
+  letter-spacing: 2px;
+  text-shadow: 1px 1px 0 var(--border);
+}
+.ms-mode-txt .hb-sub {
+  font-size: 7px;
+  color: var(--dim);
+  letter-spacing: 1px;
+}
+.ms-placeholder {
+  font-size: 8px;
+  color: var(--dim);
+  letter-spacing: 1px;
+  padding: 14px 8px;
+  text-align: center;
+  border: 2px dashed var(--panel2);
+  border-radius: 10px;
+  width: 100%;
+  max-width: 360px;
+  opacity: 0.6;
+}
+
 /* ===== 房间等待大厅 ===== */
 #roomLobby {
   display: flex;
@@ -904,7 +982,10 @@ body.in-game .exit-mobile-btn { font-size: 9px; padding: 3px 9px; }
 .net-status.off { color: var(--red-lt); animation: blink 0.8s steps(2) infinite; }
 
 /* ===== 动画 ===== */
-@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+/* 注: fadeIn 故意只用 opacity, 不用 transform; 否则带 transform 的祖先会创建新的包含块,
+   让里面 position:fixed 的 .help-btn(连不上?) 改为相对祖先而非视口定位 ——
+   在 #onlineHub 高度随世界频道加载内容变化时, 按钮位置会跟着漂移 */
 @keyframes titleFloat { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
 @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.6; } }
 @keyframes btnGlow { 0%,100% { box-shadow: 0 4px 0 var(--border), 0 0 8px rgba(255,77,109,0.2); } 50% { box-shadow: 0 4px 0 var(--border), 0 0 20px rgba(255,77,109,0.5); } }

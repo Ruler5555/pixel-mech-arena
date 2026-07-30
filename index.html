@@ -15,7 +15,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" media="print" onload="this.media='all'">
 <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap"></noscript>
-<link rel="stylesheet" href="css/style.css?v=102">
+<link rel="stylesheet" href="css/style.css?v=103">
 </head>
 <body>
 <div id="app">
@@ -23,7 +23,7 @@
   <!-- ===== 全局常驻边缘: 规则 + 版本号(所有界面可见, 不滚动即可见) ===== -->
   <div id="persistEdge">
     <button id="rulesBtn" class="edge-btn" aria-label="游戏规则">规则?</button>
-    <span id="versionTag" class="version-tag">v102</span>
+    <span id="versionTag" class="version-tag">v103</span>
   </div>
 
   <!-- ===== 登录界面 ===== -->
@@ -97,6 +97,25 @@
         <span class="hb-txt">联机大厅</span>
         <span class="hb-sub">创建房间 · 输入房号 · 世界频道</span>
       </button>
+    </div>
+  </div>
+
+  <!-- ===== 玩法选择屏(Hub → 副本 → 选择模式) ===== -->
+  <div id="modeSelect" class="hidden">
+    <div class="ms-top">
+      <button id="btnModeBack" class="bar-btn">← 返回</button>
+      <span class="ms-title">选择玩法</span>
+      <span class="ol-spacer"></span>
+    </div>
+    <div class="ms-body">
+      <button id="btnModeAI" class="ms-mode-btn blue">
+        <span class="ms-mode-ico">🤖</span>
+        <span class="ms-mode-txt">
+          <span class="hb-txt">人机模式</span>
+          <span class="hb-sub">单人 vs AI</span>
+        </span>
+      </button>
+      <div class="ms-placeholder">更多玩法敬请期待</div>
     </div>
   </div>
 
@@ -268,16 +287,16 @@
 </div>
 
 <!-- 所有脚本加 defer: 并行下载、按序执行、不阻塞首屏 DOM 解析; 加快首屏可点 -->
-<script defer src="vendor/peerjs.min.js?v=102"></script>
-<script defer src="vendor/mqtt.min.js?v=102"></script>
-<script defer src="js/auth.js?v=102"></script>
-<script defer src="js/world.js?v=102"></script>
-<script defer src="js/input.js?v=102"></script>
-<script defer src="js/touch.js?v=102"></script>
-<script defer src="js/sprite.js?v=102"></script>
-<script defer src="js/player.js?v=102"></script>
-<script defer src="js/net.js?v=102"></script>
-<script defer src="js/game.js?v=102"></script>
-<script defer src="js/main.js?v=102"></script>
+<script defer src="vendor/peerjs.min.js?v=103"></script>
+<script defer src="vendor/mqtt.min.js?v=103"></script>
+<script defer src="js/auth.js?v=103"></script>
+<script defer src="js/world.js?v=103"></script>
+<script defer src="js/input.js?v=103"></script>
+<script defer src="js/touch.js?v=103"></script>
+<script defer src="js/sprite.js?v=103"></script>
+<script defer src="js/player.js?v=103"></script>
+<script defer src="js/net.js?v=103"></script>
+<script defer src="js/game.js?v=103"></script>
+<script defer src="js/main.js?v=103"></script>
 </body>
 </html>

@@ -168,6 +168,16 @@
     leaveGame();
   }
 
+  function showModeSelect() {
+    authScreen.classList.add('hidden');
+    lobby.classList.add('hidden');
+    roomLobby.classList.add('hidden');
+    gameWrap.classList.add('hidden');
+    onlineHub.classList.add('hidden');
+    modeSelect.classList.remove('hidden');
+    leaveGame();
+  }
+
   function authErr(msg) {
     authStatusEl.textContent = msg;
     authStatusEl.className = 'auth-status';
@@ -529,8 +539,20 @@
   const exitMobileBtn = document.getElementById('exitMobileBtn');
   if (exitMobileBtn) exitMobileBtn.addEventListener('click', onExit);
 
+  // ===== DOM: 玩法选择屏 =====
+  const modeSelect = document.getElementById('modeSelect');
+  const btnModeBack = document.getElementById('btnModeBack');
+  const btnModeAI = document.getElementById('btnModeAI');
+
   // ===== 大厅按钮 =====
+  // 副本入口 → 改为进入「选择玩法」屏, 由屏内按钮再决定具体模式
   btnOffline.addEventListener('click', () => {
+    showModeSelect();
+  });
+
+  // 玩法选择屏: 返回 / 人机模式
+  if (btnModeBack) btnModeBack.addEventListener('click', () => { showLobby(); });
+  if (btnModeAI) btnModeAI.addEventListener('click', () => {
     setStatus('加载中' + loadingDots());
     game.setMode('offline');
     roleP1.textContent = '玩家';
@@ -704,6 +726,10 @@
 
   // ===== 更新公告: 点击版本号显示近三次更新(倒序: 最新在前; 每条用短句概括改动, 一点一换行; 每次发版须 prepend 一条真实版本) =====
   const CHANGELOG = [
+    ['v103', [
+      '副本新增选择玩法屏',
+      '修复连不上?按钮位置漂移'
+    ]],
     ['v102', [
       '登录界面上移, 字体/脚本异步',
       '加载省略号动态可视化'
@@ -711,9 +737,6 @@
     ['v101', [
       '顶栏字号回调紧凑版',
       '移动端禁垂直滚动'
-    ]],
-    ['v100', [
-      '对局顶栏常驻显示本地/延迟/模式'
     ]]
   ];
   const versionTag = document.getElementById('versionTag');
