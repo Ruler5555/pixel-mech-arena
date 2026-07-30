@@ -777,20 +777,21 @@ body {
   gap: 12px;
   pointer-events: none;
 }
-/* ===== 左半区拖动式虚拟摇杆 ===== */
+/* ===== 左半区拖动式虚拟摇杆(尺寸随屏自适应) ===== */
 .move-zone {
   position: relative;
-  width: 130px;
-  height: 130px;
+  width: clamp(104px, 28vw, 132px);
+  height: clamp(104px, 28vw, 132px);
   pointer-events: auto;
   touch-action: none;
   display: flex;
   align-items: center;
   justify-content: center;
+  flex: 0 0 auto;
 }
 .stick-base {
-  width: 110px;
-  height: 110px;
+  width: clamp(86px, 23vw, 110px);
+  height: clamp(86px, 23vw, 110px);
   border-radius: 50%;
   background: rgba(37,37,80,0.35);
   border: 3px dashed rgba(95,239,140,0.4);
@@ -805,8 +806,8 @@ body {
   background: rgba(95,239,140,0.12);
 }
 .stick-knob {
-  width: 52px;
-  height: 52px;
+  width: clamp(40px, 11vw, 52px);
+  height: clamp(40px, 11vw, 52px);
   border-radius: 50%;
   background: radial-gradient(circle at 35% 30%, var(--accent) 0%, var(--accent-dk) 70%);
   border: 3px solid var(--border);
@@ -827,17 +828,21 @@ body {
 }
 .move-zone.active .move-hint { opacity: 0; }
 
-/* ===== 移动端独立退出按钮(仅触屏显示) ===== */
+/* ===== 移动端独立退出按钮: 钉在顶部右侧, 脱离底部布局流, 避免挤压键位 ===== */
 .exit-mobile-btn {
+  position: fixed;
+  top: calc(env(safe-area-inset-top) + 10px);
+  right: 12px;
+  z-index: 30;
   display: none; /* 默认隐藏, 由 (pointer:coarse) 媒体查询显示 */
   font-family: inherit;
-  font-size: 8px;
+  font-size: 10px;
   letter-spacing: 1px;
   color: var(--red);
   background: rgba(196,58,85,0.25);
   border: 2px solid var(--red-dk);
   border-radius: 10px;
-  padding: 8px 12px;
+  padding: 9px 14px;
   cursor: pointer;
   pointer-events: auto;
   touch-action: none;
@@ -847,35 +852,41 @@ body {
   transition: transform 0.08s, filter 0.08s;
 }
 .exit-mobile-btn:active { transform: translateY(2px); filter: brightness(1.2); }
+
+/* ===== 右侧扇形按键集群: 容器随屏自适应, 按钮百分比定位+clamp尺寸, 缩放永不错位重叠 ===== */
 .action-cluster {
   position: relative;
-  width: 215px;
-  height: 200px;
+  width: clamp(186px, min(46vw, 30vh), 248px);
+  height: clamp(176px, min(44vw, 29vh), 212px);
   pointer-events: none;
+  flex: 0 0 auto;
 }
 .action-cluster .tbtn {
   position: absolute;
 }
 /* 主攻击(轻击): 右下角超大, 右手拇指自然落点 */
-.action-cluster .atkL.main {
-  right: 6px;  bottom: 6px;
-  width: 84px; height: 84px;
+.action-cluster .tbtn.atkL.main {
+  right: 0%;  bottom: 0%;
+  width: clamp(60px, min(18vw, 13vh), 90px);
+  height: clamp(60px, min(18vw, 13vh), 90px);
 }
-/* 重击: 主攻击左上方, 次常用(尺寸加大, 更易点中);
-   右移 12px(76) 与防御拉开 10px 水平间距, 上移 16px(90) 避免与主攻击视觉重叠 */
-.action-cluster .atkH {
-  right: 76px; bottom: 90px;
-  width: 72px; height: 72px;
+/* 重击: 主攻击左上方 */
+.action-cluster .tbtn.atkH {
+  right: 34%; bottom: 56%;
+  width: clamp(50px, min(14vw, 10vh), 72px);
+  height: clamp(50px, min(14vw, 10vh), 72px);
 }
-/* 跳跃: 主攻击正上方, 拇指上滑可达 */
-.action-cluster .jump {
-  right: 14px; bottom: 100px;
-  width: 62px; height: 62px;
+/* 跳跃: 主攻击正上方 */
+.action-cluster .tbtn.jump {
+  right: 6%; bottom: 60%;
+  width: clamp(46px, min(13vw, 9vh), 64px);
+  height: clamp(46px, min(13vw, 9vh), 64px);
 }
-/* 防御: 扇形最左, 较小(常按); 右移 6px 进一步远离重击, 减少误触 */
-.action-cluster .defend {
-  right: 158px; bottom: 34px;
-  width: 56px;  height: 56px;
+/* 防御: 扇形最左下方, 较小(常按) */
+.action-cluster .tbtn.defend {
+  right: 70%; bottom: 7%;
+  width: clamp(44px, min(12vw, 9vh), 56px);
+  height: clamp(44px, min(12vw, 9vh), 56px);
 }
 .tbtn {
   pointer-events: auto;
@@ -902,19 +913,19 @@ body {
   color: var(--accent);
 }
 .tbtn.pad {
-  width: 68px; height: 68px;
-  font-size: 24px;
+  width: clamp(56px, 16vw, 68px); height: clamp(56px, 16vw, 68px);
+  font-size: clamp(18px, 5vw, 24px);
 }
 .tbtn.act {
-  width: 64px; height: 60px;
-  font-size: 12px;
+  width: clamp(50px, 14vw, 64px); height: clamp(50px, 14vw, 60px);
+  font-size: clamp(10px, 3vw, 12px);
   border-radius: 50%;
   flex-direction: column;
   line-height: 1.1;
 }
 .tbtn.act.main {
-  width: 74px; height: 70px;
-  font-size: 13px;
+  width: clamp(60px, min(18vw, 13vh), 90px); height: clamp(60px, min(18vw, 13vh), 90px);
+  font-size: clamp(11px, 3vw, 13px);
   border-width: 4px;
   box-shadow: 0 0 0 2px var(--accent), 0 0 12px rgba(95,239,140,0.4), 0 4px 0 var(--border);
 }
@@ -971,21 +982,12 @@ body {
 }
 
 @media (max-width: 380px) {
-  .tbtn.pad { width: 58px; height: 58px; font-size: 20px; }
-  .action-cluster { transform: scale(0.72); transform-origin: bottom right; }
   .touch-controls { padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); }
-  .move-zone { width: 108px; height: 108px; }
-  .stick-base { width: 92px; height: 92px; }
-  .stick-knob { width: 44px; height: 44px; }
 }
 
 @media (orientation: landscape) and (max-height: 500px) {
   header { display: none; }
   body { padding-bottom: 82px; }
-  .tbtn.pad { width: 58px; height: 58px; font-size: 20px; }
-  .action-cluster { transform: scale(0.82); transform-origin: bottom right; }
-  .move-zone { width: 110px; height: 110px; }
-  .stick-base { width: 92px; height: 92px; }
 }
 
 /* 防止 iOS 长按选中、橡皮筋滚动 */

@@ -62,7 +62,7 @@
   let stickOriginY = 0;
   let stickCurDir = null;      // 'left' | 'right' | null
   const DEAD_ZONE = 8;         // 死区 px, 防止微抖动
-  const MAX_TRAVEL = 48;       // 摇杆最大位移 px
+  let maxTravel = 48;          // 摇杆最大位移 px, 随 move-zone 实际尺寸动态计算
 
   function stickStart(e) {
     if (stickPointerId !== null) return; // 已有指针
@@ -70,6 +70,8 @@
     stickOriginX = e.clientX;
     stickOriginY = e.clientY;
     stickCurDir = null;
+    const rect = moveZone.getBoundingClientRect();
+    maxTravel = Math.max(20, rect.width * 0.40);
     moveZone.classList.add('active');
     try { moveZone.setPointerCapture(e.pointerId); } catch (_) {}
     e.preventDefault();
@@ -81,7 +83,7 @@
     const dy = e.clientY - stickOriginY;
     // 限制 knob 位移
     const dist = Math.hypot(dx, dy);
-    const clamped = dist > MAX_TRAVEL ? MAX_TRAVEL / dist : 1;
+    const clamped = dist > maxTravel ? maxTravel / dist : 1;
     const kx = dx * clamped;
     const ky = dy * clamped;
     if (stickKnob) {
