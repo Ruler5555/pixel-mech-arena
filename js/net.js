@@ -7,9 +7,14 @@
 
 // TURN 配置槽: 用于"对称 NAT"兜底——无 TURN 时这类网络会退回公共 broker 中继(200ms+ 高延迟)
 // 根治方案: 部署自托管 coturn(见仓库 deploy/turn/ 目录的 docker-compose 与说明),
-//   启动后把下面的 TURN 凭据填进来即生效, 无需改其它代码
+//   启动后把下面的 TURN 凭据填进本数组即生效, 无需改其它代码
+// [免费即用] 已内置 Metered 公共 TURN(openrelay.metered.ca, 20GB/月免费, 跑在 80/443 端口能穿透多数防火墙),
+//   对称 NAT 也能走真·P2P 中继(延迟远低于海外 MQTT broker), 不再被迫走公共 broker
 const TURN_SERVERS = [
-  // 自托管 TURN 填这里(示例, 生产必填):
+  // 免费公共 TURN(开箱即用, 无需账号): 对称 NAT 下经它中继实现真·P2P
+  { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+  { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
+  // 自托管 TURN 填这里(生产更稳, 把上面两条删掉换成你自己的):
   // { urls: 'turn:turn.your-domain.com:3478?transport=tcp', username: 'pma', credential: 'YOUR_SECRET' },
   // { urls: 'turn:turn.your-domain.com:3478?transport=udp', username: 'pma', credential: 'YOUR_SECRET' }
 ];
@@ -101,13 +106,14 @@ const Net = (() => {
       peer.on('open', () => {
         progress('信令已就绪, 等待对手...');
         finish(roomCode);
-        // [跨网兜底] 信令已就绪但 6s 内无对手经 P2P 连入(多为跨网/对称 NAT 穿透失败),
-        // 自动转中继, 保证「不同网络」也能连上(中继为海外 broker, 延迟较高但可用)
-        // 同网/可直连的跨网会在 1s 内 P2P 连上, 本定时器检测到 conn.open 即不触发, 不影响体感
-        connectDeadline = setTimeout(() => { if (!conn || !conn.open) toRelay(); }, 6000);
+        // [跨网兜底] 信令就绪后给 P2P(含 TURN 中继)充足时间建连, 15s 内无对手经 P2P 连入才转中继
+        // 内置免费 TURN(openrelay.metered.ca)后, 对称 NAT 也能在 1~3s 走 TURN 真·P2P 建连, 定时器极少触发;
+        // 同网/可直连更在 1s 内连上 → 不再像 v80 那样 6s 盲转中继把同网 P2P 杀掉
+        connectDeadline = setTimeout(() => { if (!conn || !conn.open) toRelay(); }, 15000);
       });
 
       peer.on('connection', (c) => {
+        clearTimeout(connectDeadline); // P2P 连入即取消中继兜底定时器
         if (conn && conn.open) { c.close(); return; }
         // 若已切到中继且中继已连, 忽略 P2P 连接(以中继为准)
         if (mode === 'relay' && mqttClient && mqttClient.connected) { c.close(); return; }
@@ -159,14 +165,14 @@ const Net = (() => {
         conn = peer.connect(PEER_PREFIX + code, { reliable: true, serialization: 'json' });
         bindConn(conn);
 
-        // P2P 建立超时检测
+        // P2P 建立超时检测: 给 TURN/STUN 充足握手时间(10s), 内置免费 TURN 后多数跨网 1~3s 即建连
         clearTimeout(connectDeadline);
         connectDeadline = setTimeout(() => {
           if (!conn || !conn.open) {
             progress('P2P 连接超时(可能 NAT 穿透失败),尝试中继模式...');
             _fallbackToRelay(code, resolve, reject);
           }
-        }, 4500);
+        }, 10000);
 
         conn.on('open', () => {
           clearTimeout(connectDeadline);
@@ -266,7 +272,11 @@ const Net = (() => {
   let mqttClient = null;
   let relayTopic = null;
 
-  const MQTT_URL = 'wss://broker.emqx.io:8084/mqtt';
+  // 中继 broker 列表(按顺序回退): 公共 broker 偶发不可用, 自动切下一个, 减少"连接中断"
+  const MQTT_BROKERS = [
+    'wss://broker.emqx.io:8084/mqtt',
+    'wss://broker.hivemq.com:8884/mqtt'
+  ];
 
   function _fallbackToRelay(code, resolve, reject) {
     progress('切换到中继模式...');
@@ -281,89 +291,100 @@ const Net = (() => {
       reject(new Error('MQTT 库未加载,请检查网络后重试'));
       return;
     }
-    let resolved = false;
-    let peerReady = false;
-    let helloRetryTimer = null;
-
-    try {
-      const clientId = 'pma26-' + role + '-' + Date.now() + '-' + Math.random().toString(16).slice(2,6);
-      mqttClient = mqtt.connect(MQTT_URL, {
-        clientId, clean: true, keepalive: 30,
-        reconnectPeriod: 2000, connectTimeout: 10000
-      });
-    } catch (e) {
-      reject(new Error('中继连接失败: ' + e.message));
-      return;
-    }
-
-    mqttClient.on('connect', () => {
-      if (!resolved) {
-        resolved = true;
-        progress('中继已连接,等待对手...');
-        mqttClient.subscribe(relayTopic, { qos: 0 });
-        _startPingMonitor(); // 中继就绪后也启动 RTT 测量
-        resolve(code); // 连上 broker 即 resolve,不等对手
-        // client 主动发 hello 带名字, 并重发直到收到 world
-        if (role === 'client') {
-          const sendHello = () => {
-            if (peerReady) return;
-            _relaySend({ t: 'hello', n: playerName });
-            helloRetryTimer = setTimeout(sendHello, 1500);
-          };
-          setTimeout(sendHello, 300);
-        }
-      } else {
-        progress('中继已重连');
-        try { mqttClient.subscribe(relayTopic, { qos: 0 }); } catch(e){}
-        // 重连后若已就绪, 重新握手并通知上层恢复(让宽限期清除)
-        if (peerReady) {
-          if (role === 'client') _relaySend({ t: 'hello', n: playerName });
-          // host 收到 hello 会自动回 world
-          emit('connected', { name: '' });
-        }
+    // 按顺序尝试 broker 列表, 当前不可用自动切下一个
+    const tryBroker = (idx) => {
+      if (idx >= MQTT_BROKERS.length) {
+        reject(new Error('中继连接失败: 所有 broker 均不可用'));
+        return;
       }
-    });
+      try { if (mqttClient) mqttClient.end(true); } catch (e) {} // 切 broker 前结束上一个
+      mqttClient = null;
+      let resolved = false;
+      let peerReady = false;
+      let helloRetryTimer = null;
+      const tag = idx === 0 ? 'EMQX' : 'HiveMQ';
 
-    mqttClient.on('message', (topic, payload) => {
       try {
-        const msg = JSON.parse(payload.toString());
-        if (!msg || !msg.t) return;
-        if (msg.r === role) return;
-        if (msg.t === 'hello') {
-          if (!peerReady) {
-            peerReady = true;
-            progress('对手已加入');
-            emit('connected', { name: msg.n || '' });
-          }
-          // host 每次收到 hello 都回 world 带名字, 确保 client 能收到
-          if (role === 'host') _relaySend({ t: 'world', n: playerName });
-        } else if (msg.t === 'world') {
-          // client 收到 host 确认
-          if (!peerReady) {
-            peerReady = true;
-            if (helloRetryTimer) { clearTimeout(helloRetryTimer); helloRetryTimer = null; }
-            progress('已连接主机');
-            emit('connected', { name: msg.n || '' });
+        const clientId = 'pma26-' + role + '-' + Date.now() + '-' + Math.random().toString(16).slice(2,6);
+        mqttClient = mqtt.connect(MQTT_BROKERS[idx], {
+          clientId, clean: true, keepalive: 30,
+          reconnectPeriod: 2000, connectTimeout: 10000
+        });
+      } catch (e) {
+        tryBroker(idx + 1); return;
+      }
+
+      mqttClient.on('connect', () => {
+        if (!resolved) {
+          resolved = true;
+          progress('中继已连接(' + tag + '),等待对手...');
+          mqttClient.subscribe(relayTopic, { qos: 0 });
+          _startPingMonitor(); // 中继就绪后也启动 RTT 测量
+          resolve(code); // 连上 broker 即 resolve,不等对手
+          // client 主动发 hello 带名字, 并重发直到收到 world
+          if (role === 'client') {
+            const sendHello = () => {
+              if (peerReady) return;
+              _relaySend({ t: 'hello', n: playerName });
+              helloRetryTimer = setTimeout(sendHello, 1500);
+            };
+            setTimeout(sendHello, 300);
           }
         } else {
-          // 游戏消息统一走去重(hello/world 握手消息不去重, 允许重发)
-          if (!_acceptSeq(msg)) return;
-          _routeMsg(msg);
+          progress('中继已重连');
+          try { mqttClient.subscribe(relayTopic, { qos: 0 }); } catch(e){}
+          // 重连后若已就绪, 重新握手并通知上层恢复(让宽限期清除)
+          if (peerReady) {
+            if (role === 'client') _relaySend({ t: 'hello', n: playerName });
+            // host 收到 hello 会自动回 world
+            emit('connected', { name: '' });
+          }
         }
-      } catch (e) {}
-    });
+      });
 
-    mqttClient.on('error', (err) => {
-      if (!resolved) {
-        resolved = true;
-        reject(new Error('中继连接失败: ' + (err.message || '网络错误')));
-      } else {
-        emit('error', new Error('中继连接错误'));
-      }
-    });
+      mqttClient.on('message', (topic, payload) => {
+        try {
+          const msg = JSON.parse(payload.toString());
+          if (!msg || !msg.t) return;
+          if (msg.r === role) return;
+          if (msg.t === 'hello') {
+            if (!peerReady) {
+              peerReady = true;
+              progress('对手已加入');
+              emit('connected', { name: msg.n || '' });
+            }
+            // host 每次收到 hello 都回 world 带名字, 确保 client 能收到
+            if (role === 'host') _relaySend({ t: 'world', n: playerName });
+          } else if (msg.t === 'world') {
+            // client 收到 host 确认
+            if (!peerReady) {
+              peerReady = true;
+              if (helloRetryTimer) { clearTimeout(helloRetryTimer); helloRetryTimer = null; }
+              progress('已连接主机');
+              emit('connected', { name: msg.n || '' });
+            }
+          } else {
+            // 游戏消息统一走去重(hello/world 握手消息不去重, 允许重发)
+            if (!_acceptSeq(msg)) return;
+            _routeMsg(msg);
+          }
+        } catch (e) {}
+      });
 
-    mqttClient.on('offline', () => { if (peerReady) progress('中继重连中...'); });
-    mqttClient.on('reconnect', () => { if (peerReady) progress('中继重连中...'); });
+      mqttClient.on('error', (err) => {
+        if (!resolved) {
+          // 当前 broker 不可用, 顺序尝试下一个
+          progress('中继 ' + tag + ' 不可用, 尝试备用...');
+          tryBroker(idx + 1);
+        } else {
+          emit('error', new Error('中继连接错误'));
+        }
+      });
+
+      mqttClient.on('offline', () => { if (peerReady) progress('中继重连中...'); });
+      mqttClient.on('reconnect', () => { if (peerReady) progress('中继重连中...'); });
+    };
+    tryBroker(0);
   }
 
   function _relaySend(obj) {
