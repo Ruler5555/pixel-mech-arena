@@ -7,13 +7,19 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="theme-color" content="#1a1a2e">
+<meta name="theme-color" content="#1b1b40">
 <meta name="format-detection" content="telephone=no">
 <title>PIXEL MECH ARENA · 像素机甲竞技场</title>
-<link rel="stylesheet" href="css/style.css?v=89">
+<link rel="stylesheet" href="css/style.css?v=90">
 </head>
 <body>
 <div id="app">
+
+  <!-- ===== 全局常驻边缘: 规则 + 版本号(所有界面可见, 不滚动即可见) ===== -->
+  <div id="persistEdge">
+    <button id="rulesBtn" class="edge-btn" aria-label="游戏规则">规则?</button>
+    <span id="versionTag" class="version-tag">v90</span>
+  </div>
 
   <!-- ===== 登录界面 ===== -->
   <div id="authScreen">
@@ -22,7 +28,7 @@
         <h1>PIXEL MECH<span class="hl"> ARENA</span></h1>
         <p class="sub">像素机甲竞技场</p>
       </div>
-      <!-- 主入口: 快速登录(原游客模式, 本设备固定同一账号) -->
+      <!-- 主入口: 快速登录(本设备固定同一账号) -->
       <button id="btnGuest" class="auth-quick"><span class="ql-ico">⚡</span><span class="ql-txt">快速登录</span></button>
       <p class="auth-quick-tip">无需注册 · 仅保存在当前浏览器</p>
 
@@ -56,14 +62,10 @@
         <p>· 密码忘记无法找回, 昵称党建议直接快速登录</p>
       </div>
     </div>
-    <span class="version-tag" id="versionTag">v89</span>
-    <div id="changelogPop" class="changelog-pop hidden"></div>
   </div>
 
-  <!-- ===== 主菜单/大厅 ===== -->
+  <!-- ===== 主菜单 / 双入口 Hub ===== -->
   <div id="lobby" class="hidden">
-    <span class="version-tag lobby-version" id="lobbyVersion">v89</span>
-
     <!-- 玩家信息条 -->
     <div class="player-bar">
       <div class="player-info">
@@ -73,45 +75,43 @@
       <button id="btnLogout" class="bar-btn">登出</button>
     </div>
 
-    <div class="lobby-content">
-      <!-- 左侧: 房间操作 -->
-      <div class="lobby-main">
-        <div class="lobby-box">
-          <h2 class="lobby-title">联机大厅</h2>
-          <p class="lobby-tip">与朋友对战,无需同一网络</p>
+    <div class="hub">
+      <h2 class="hub-title">选择模式</h2>
+      <p class="hub-tip">与 AI 单练, 或拉朋友联机对战</p>
 
-          <button id="btnHost" class="lobby-btn primary">创建房间</button>
-          <div class="lobby-sep">— 或 —</div>
-          <div class="lobby-join">
-            <input id="roomInput" class="lobby-input" inputmode="numeric" maxlength="6" placeholder="输入房号">
-            <button id="btnJoin" class="lobby-btn">加入</button>
-          </div>
-          <button id="btnOffline" class="lobby-btn ghost">单人 vs AI(离线)</button>
-          <div id="lobbyStatus" class="lobby-status"></div>
-        </div>
+      <!-- 副本: 与 AI 对战(原单人离线, 蓝) -->
+      <button id="btnOffline" class="hub-btn blue">
+        <span class="hb-ico">🤖</span>
+        <span class="hb-txt">副本</span>
+        <span class="hb-sub">单人 vs AI</span>
+      </button>
 
-        <div class="lobby-help-row">
-          <details class="lobby-help">
-            <summary>连不上怎么办?</summary>
-            <p>· 「创建房间」会自动选最快模式(P2P/中继)</p>
-            <p>· 数秒内未连上会自动并行启动中继</p>
-            <p>· 网络抖动时会自动重连,不用退出去</p>
-            <p class="warn-text">· 中继模式为公共信道,请勿在对局中输入隐私信息</p>
-          </details>
-          <details class="lobby-help">
-            <summary>游戏规则</summary>
-            <p>· 三局两胜(BO3),每回合 60 秒,时间到比血量,高者胜</p>
-            <p>· 血量上限 100,显示在各自血条下方,受击后实时更新</p>
-            <p>· 轻击:伤害 8,出手快后摇短;重击:伤害 18,出手慢,破防惩罚强</p>
-            <p>· 防御:减伤 80% 并反弹 50% 伤害给攻击者,但防御时不能移动</p>
-            <p>· 二段跳可空中走位,但空中不能攻击</p>
-            <p>· 键盘: A/D 移动 · W 跳 · J 轻击 · K 重击 · L 防御</p>
-            <p>· 移动端: 左下方向滑杆,右下 轻击/重击/防御/跳跃</p>
-          </details>
-        </div>
+      <!-- 联机大厅: 创建/加入房间(红) -->
+      <button id="btnOpenOnline" class="hub-btn red">
+        <span class="hb-ico">⚔️</span>
+        <span class="hb-txt">联机大厅</span>
+        <span class="hb-sub">创建房间 · 输入房号 · 世界频道</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ===== 联机大厅(创建/加入/世界频道) ===== -->
+  <div id="onlineHub" class="hidden">
+    <div class="ol-top">
+      <button id="btnBackHub" class="bar-btn">← 返回</button>
+      <span class="ol-title">联机大厅</span>
+      <span class="ol-spacer"></span>
+    </div>
+
+    <div class="ol-body">
+      <button id="btnHost" class="lobby-btn primary">创建房间</button>
+      <div class="lobby-sep">— 或输入房号加入 —</div>
+      <div class="lobby-join">
+        <input id="roomInput" class="lobby-input" inputmode="numeric" maxlength="6" placeholder="输入房号">
+        <button id="btnJoin" class="lobby-btn">加入</button>
       </div>
+      <div id="lobbyStatus" class="lobby-status"></div>
 
-      <!-- 右侧: 世界频道 -->
       <div class="world-panel">
         <div class="world-header">
           <span class="world-title">世界频道</span>
@@ -122,6 +122,9 @@
         </div>
       </div>
     </div>
+
+    <!-- 连不上怎么办: 常驻边缘按钮 -->
+    <button class="help-btn" data-help>连不上?</button>
   </div>
 
   <!-- ===== 房间等待大厅 ===== -->
@@ -152,6 +155,8 @@
       </div>
       <div id="roomLobbyStatus" class="lobby-status"></div>
     </div>
+    <!-- 连不上怎么办: 常驻边缘按钮 -->
+    <button class="help-btn" data-help>连不上?</button>
   </div>
 
   <!-- ===== 游戏区(联机/离线共用) ===== -->
@@ -218,18 +223,54 @@
       <div class="ctrl"><b>ESC</b> 离开</div>
     </div>
   </div>
+
+  <!-- ===== 全局弹层 ===== -->
+  <div id="changelogPop" class="changelog-pop hidden"></div>
+
+  <div id="rulesPop" class="info-pop hidden">
+    <div class="info-card">
+      <div class="info-title">游戏规则</div>
+      <div class="info-body">
+        <p>· 三局两胜(BO3),每回合 60 秒,时间到比血量,高者胜;同血平局</p>
+        <p>· 血量上限 100,显示在各自血条下方,受击后实时更新</p>
+        <p>· 轻击:伤害 8,出手快后摇短;重击:伤害 18,出手慢,破防惩罚强</p>
+        <p>· 防御:减伤 80% 并反弹 50% 伤害给攻击者,但防御时不能移动</p>
+        <p>· 二段跳可空中走位,但空中不能攻击</p>
+        <p>· 键盘: A/D 移动 · W 跳 · J 轻击 · K 重击 · L 防御</p>
+        <p>· 移动端: 左下方向滑杆,右下 轻击/重击/防御/跳跃</p>
+      </div>
+      <button class="info-close" data-close="rulesPop">知道了</button>
+    </div>
+  </div>
+
+  <div id="helpPop" class="info-pop hidden">
+    <div class="info-card">
+      <div class="info-title">连不上怎么办?</div>
+      <div class="info-body">
+        <p>① 加房后一直「等待主机开始」: 让房主点「开始对战」即可,这是正常流程</p>
+        <p>② 右上角一直「测速中…」: 还在连接;显示「延迟 Xms」= 已连上(P2P 最快)</p>
+        <p>③ 显示「中继」且很卡: 你家/对方是对称 NAT,正走免费 TURN 中转(正常);若卡到没法玩,让任一方切到同一 WiFi 或开手机流量</p>
+        <p>④ 突然断开: 游戏会自动重连,等几秒;仍不行点退出回大厅重进</p>
+        <p>⑤ 世界频道看不到房间: 只有点过「分享到世界」的房间才会出现</p>
+        <p>⑥ 微信里打不开/空白: 杀掉页面重进强刷,微信缓存很顽固</p>
+        <p class="warn-text">· 中继模式为公共信道,请勿在对局中输入隐私信息</p>
+      </div>
+      <button class="info-close" data-close="helpPop">知道了</button>
+    </div>
+  </div>
+
 </div>
 
-<script src="vendor/peerjs.min.js?v=89"></script>
-<script src="vendor/mqtt.min.js?v=89"></script>
-<script src="js/auth.js?v=89"></script>
-<script src="js/world.js?v=89"></script>
-<script src="js/input.js?v=89"></script>
-<script src="js/touch.js?v=89"></script>
-<script src="js/sprite.js?v=89"></script>
-<script src="js/player.js?v=89"></script>
-<script src="js/net.js?v=89"></script>
-<script src="js/game.js?v=89"></script>
-<script src="js/main.js?v=89"></script>
+<script src="vendor/peerjs.min.js?v=90"></script>
+<script src="vendor/mqtt.min.js?v=90"></script>
+<script src="js/auth.js?v=90"></script>
+<script src="js/world.js?v=90"></script>
+<script src="js/input.js?v=90"></script>
+<script src="js/touch.js?v=90"></script>
+<script src="js/sprite.js?v=90"></script>
+<script src="js/player.js?v=90"></script>
+<script src="js/net.js?v=90"></script>
+<script src="js/game.js?v=90"></script>
+<script src="js/main.js?v=90"></script>
 </body>
 </html>

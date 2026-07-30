@@ -29,6 +29,12 @@
   const lobbyStatus = document.getElementById('lobbyStatus');
   const worldList = document.getElementById('worldList');
   const worldCount = document.getElementById('worldCount');
+  const onlineHub = document.getElementById('onlineHub');
+  const btnOpenOnline = document.getElementById('btnOpenOnline');
+  const btnBackHub = document.getElementById('btnBackHub');
+  const rulesBtn = document.getElementById('rulesBtn');
+  const rulesPop = document.getElementById('rulesPop');
+  const helpPop = document.getElementById('helpPop');
 
   // ===== DOM: 房间等待大厅 =====
   const roomLobby = document.getElementById('roomLobby');
@@ -133,11 +139,13 @@
     lobby.classList.add('hidden');
     roomLobby.classList.add('hidden');
     gameWrap.classList.add('hidden');
+    onlineHub.classList.add('hidden');
   }
   function showLobby() {
     authScreen.classList.add('hidden');
     roomLobby.classList.add('hidden');
     gameWrap.classList.add('hidden');
+    onlineHub.classList.add('hidden');
     lobby.classList.remove('hidden');
     if (currentPlayer) {
       lobbyPlayerName.textContent = currentPlayer.name;
@@ -146,6 +154,13 @@
     // 初始化世界频道
     World.init();
     World.onUpdate(renderWorldList);
+  }
+  function showOnlineHub() {
+    authScreen.classList.add('hidden');
+    lobby.classList.add('hidden');
+    roomLobby.classList.add('hidden');
+    gameWrap.classList.add('hidden');
+    onlineHub.classList.remove('hidden');
   }
 
   function authErr(msg) {
@@ -271,6 +286,7 @@
     lobby.classList.add('hidden');
     gameWrap.classList.add('hidden');
     roomLobby.classList.remove('hidden');
+    onlineHub.classList.add('hidden');
     roomLobbyCode.textContent = code;
     slotP1Name.textContent = currentPlayer ? currentPlayer.name : '玩家';
     slotP2Name.textContent = '等待中...';
@@ -335,6 +351,7 @@
   function showGame() {
     lobby.classList.add('hidden');
     roomLobby.classList.add('hidden');
+    onlineHub.classList.add('hidden');
     gameWrap.classList.remove('hidden');
   }
   function showOverlay(title, text, btn, opts) {
@@ -516,6 +533,10 @@
     setStatus('');
   });
 
+  // Hub → 联机大厅 / 返回 Hub
+  if (btnOpenOnline) btnOpenOnline.addEventListener('click', () => { showOnlineHub(); });
+  if (btnBackHub) btnBackHub.addEventListener('click', () => { showLobby(); });
+
   btnHost.addEventListener('click', () => startHost());
 
   async function startHost() {
@@ -677,20 +698,18 @@
 
   // ===== 更新公告: 点击版本号显示近三次更新(倒序: 最新在前; 每条用短句概括改动, 一点一换行; 每次发版须 prepend 一条真实版本) =====
   const CHANGELOG = [
+    ['v90', [
+      '红蓝活泼UI重做'
+    ]],
     ['v89', [
       '修复更新公告多显示版本'
     ]],
     ['v88', [
       '修复对手动画慢/跳帧'
-    ]],
-    ['v87', [
-      '移除刷新按键'
     ]]
   ];
   const versionTag = document.getElementById('versionTag');
   const changelogPop = document.getElementById('changelogPop');
-  const lobbyVersion = document.getElementById('lobbyVersion');
-  if (lobbyVersion && versionTag) lobbyVersion.textContent = versionTag.textContent; // 大厅静态版本号与登录界面同步
   if (versionTag && changelogPop) {
     changelogPop.innerHTML = '<div class="cl-title">更新公告</div>' +
       CHANGELOG.slice(0, 3).map(c => '<div class="cl-item"><span class="cl-ver">' + c[0] + '</span><div class="cl-points">' +
@@ -706,6 +725,22 @@
       }
     });
   }
+
+  // 规则 / 连不上 弹层(常驻边缘按钮触发)
+  if (rulesBtn && rulesPop) {
+    rulesBtn.addEventListener('click', (e) => { e.stopPropagation(); rulesPop.classList.toggle('hidden'); });
+  }
+  if (helpPop) {
+    document.querySelectorAll('.help-btn').forEach(b => b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      helpPop.classList.toggle('hidden');
+    }));
+  }
+  [rulesPop, helpPop].forEach(pop => {
+    if (!pop) return;
+    pop.addEventListener('click', (e) => { if (e.target === pop) pop.classList.add('hidden'); });
+    pop.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => pop.classList.add('hidden')));
+  });
 
   // ===== 启动 =====
   setStatus('');
