@@ -295,7 +295,7 @@
     leaveGame();
     roomLobbyCode.textContent = code;
     slotP1Name.textContent = currentPlayer ? currentPlayer.name : '玩家';
-    slotP2Name.textContent = '等待中...';
+    slotP2Name.innerHTML = '等待中' + loadingDots();
     slotP2Status.textContent = '等待加入';
     slotP2Status.className = 'slot-status';
     btnRoomStart.classList.add('hidden');
@@ -393,10 +393,16 @@
       lobbyPlayerId.textContent = currentPlayer.id;
     }
   }
+  // 加载中动画省略号: 3 个圆点依次跳起, 加载完成/失败时元素被替换即停
+  function loadingDots() {
+    return '<span class="loading-dots"><span></span><span></span><span></span></span>';
+  }
   function setStatus(msg, isErr) {
-    lobbyStatus.textContent = msg || '';
+    // 用 innerHTML 以支持 loadingDots() 等内嵌 HTML; 内容来自内部固定字符串或错误对象, 安全
+    const html = msg || '';
+    lobbyStatus.innerHTML = html;
     lobbyStatus.className = 'lobby-status' + (isErr ? ' err' : '');
-    roomLobbyStatus.textContent = msg || '';
+    roomLobbyStatus.innerHTML = html;
   }
 
   // ===== 联机"再来一局": 双方确认 + 超时自动回大厅 =====
@@ -525,7 +531,7 @@
 
   // ===== 大厅按钮 =====
   btnOffline.addEventListener('click', () => {
-    setStatus('加载中...');
+    setStatus('加载中' + loadingDots());
     game.setMode('offline');
     roleP1.textContent = '玩家';
     roleP2.textContent = 'AI';
@@ -544,7 +550,7 @@
   btnHost.addEventListener('click', () => startHost());
 
   async function startHost() {
-    setStatus('正在创建房间...');
+    setStatus('正在创建房间' + loadingDots());
     btnHost.disabled = true;
     Net.setName(currentPlayer ? currentPlayer.name : '玩家');
     bindNetEvents(); // 先绑定事件, 再连接
@@ -556,7 +562,7 @@
       hudP1Name.textContent = currentPlayer ? currentPlayer.name : 'BLUE-01';
       showRoomLobby(code);
       const mode = Net.getMode() === 'relay' ? '中继' : 'P2P';
-      setStatus('房号: ' + code + ' (' + mode + ')\n等待对手加入...');
+      setStatus('房号: ' + code + ' (' + mode + ')<br>等待对手加入' + loadingDots());
     } catch (e) {
       setStatus('创建失败: ' + (e.message || e), true);
       btnHost.disabled = false;
@@ -580,7 +586,7 @@
   btnJoin.addEventListener('click', async () => {
     const code = (roomInput.value || '').trim();
     if (!/^\d{6}$/.test(code)) { setStatus('请输入 6 位数字房号', true); return; }
-    setStatus('正在连接 ' + code + '...');
+    setStatus('正在连接 ' + code + loadingDots());
     btnJoin.disabled = true;
     Net.setName(currentPlayer ? currentPlayer.name : '玩家');
     bindNetEvents(); // 先绑定事件, 再连接
@@ -698,15 +704,16 @@
 
   // ===== 更新公告: 点击版本号显示近三次更新(倒序: 最新在前; 每条用短句概括改动, 一点一换行; 每次发版须 prepend 一条真实版本) =====
   const CHANGELOG = [
+    ['v102', [
+      '登录界面上移, 字体/脚本异步',
+      '加载省略号动态可视化'
+    ]],
     ['v101', [
       '顶栏字号回调紧凑版',
       '移动端禁垂直滚动'
     ]],
     ['v100', [
       '对局顶栏常驻显示本地/延迟/模式'
-    ]],
-    ['v99', [
-      '对局时移除顶端常驻条, 退出/延迟/模式信息升为顶栏'
     ]]
   ];
   const versionTag = document.getElementById('versionTag');

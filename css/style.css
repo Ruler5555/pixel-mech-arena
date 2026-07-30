@@ -1,5 +1,5 @@
 /* PIXEL MECH ARENA · 红蓝活泼风 / 元气骑士式竖版 UI */
-@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+/* Press Start 2P 字体改为 HTML head 内 preconnect + 异步 link 加载, 不阻塞首屏 */
 
 :root {
   /* 红蓝主色: 蓝=游玩/副本, 红=联机/对抗 */
@@ -208,8 +208,8 @@ button:active:not(:disabled) { transform: translateY(2px); }
 #authScreen {
   display: flex;
   justify-content: center;
-  align-items: center;
-  min-height: 100vh;
+  align-items: flex-start; /* 改为顶部对齐, 移动端整体上移(原本 center 在 vh/dvh 不一致时偏下) */
+  min-height: 100dvh;      /* 用动态视口高度, 与 #app 一致, 避免 100vh 与 100dvh 错位 */
   padding: 56px 16px 24px;
   position: relative;
   animation: fadeIn 0.4s ease-out;
@@ -956,3 +956,29 @@ html, body {
 
 /* 联机大厅世界频道: 高度自适应, 内容过多时可独立滚动 */
 .world-list { max-height: 40dvh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+
+/* 加载中省略号动画: 3 个圆点依次跳起, 加载完成/失败/卡顿时元素被替换即停 */
+.loading-dots {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+  height: 1em;
+  line-height: 1;
+  margin-left: 2px;
+}
+.loading-dots span {
+  width: 0.45em;
+  height: 0.45em;
+  border-radius: 50%;
+  background: currentColor;
+  margin: 0 0.15em;
+  display: inline-block;
+  animation: dot-bounce 1.4s infinite ease-in-out both;
+}
+.loading-dots span:nth-child(1) { animation-delay: -0.32s; }
+.loading-dots span:nth-child(2) { animation-delay: -0.16s; }
+.loading-dots span:nth-child(3) { animation-delay: 0s; }
+@keyframes dot-bounce {
+  0%, 80%, 100% { transform: scale(0.55); opacity: 0.5; }
+  40% { transform: scale(1); opacity: 1; }
+}
