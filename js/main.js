@@ -119,10 +119,10 @@
       rttTag.style.display = '';
       const r = Net.getRtt();
       if (r > 0) {
-        rttTag.textContent = r + 'ms';
+        rttTag.textContent = '延迟 ' + r + 'ms';
         rttTag.className = 'rtt-tag ' + (r < 80 ? 'good' : r < 150 ? 'ok' : 'bad');
       } else {
-        rttTag.textContent = '…';
+        rttTag.textContent = '测速中…';
         rttTag.className = 'rtt-tag';
       }
     }
@@ -704,6 +704,9 @@
 
   // ===== 更新公告: 点击版本号显示近三次更新(倒序: 最新在前; 每条用短句概括改动, 一点一换行; 每次发版须 prepend 一条真实版本) =====
   const CHANGELOG = [
+    ['v77', [
+      '修复联机回退境外中继'
+    ]],
     ['v76', [
       '自适应延迟插值降延迟'
     ]],
@@ -711,11 +714,6 @@
       'RTT延迟实时显示',
       'TURN配置+自托管',
       'STUN穿透增强'
-    ]],
-    ['v72', [
-      '对手渲染延迟缓冲',
-      '跳跃动画同步',
-      'P2P优先降延迟'
     ]]
   ];
   const versionTag = document.getElementById('versionTag');

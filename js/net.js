@@ -99,13 +99,6 @@ const Net = (() => {
       peer.on('open', () => {
         progress('信令已就绪, 等待对手...');
         finish(roomCode);
-        // P2P 已就绪仍并行启动中继作为备份通道(双通道互备)
-        setTimeout(() => {
-          if (mqttClient && mqttClient.connected) return;
-          progress('并行启动中继备份通道...');
-          relayTopic = 'pma26/' + roomCode;
-          _relayConnect(roomCode, () => {}, () => {});
-        }, 3000);
       });
 
       peer.on('connection', (c) => {
@@ -159,13 +152,6 @@ const Net = (() => {
         // 等关键控制消息, 导致"主机点了开始/重开, 客户端没反应"; 状态包小且 30Hz, 可靠通道足够流畅
         conn = peer.connect(PEER_PREFIX + code, { reliable: true, serialization: 'json' });
         bindConn(conn);
-        // P2P 建立后并行启动中继备份通道(与 host 对称), 使 P2P 中断时能无缝回退中继
-        setTimeout(() => {
-          if (mqttClient && mqttClient.connected) return;
-          progress('并行启动中继备份通道...');
-          relayTopic = 'pma26/' + code;
-          _relayConnect(code, () => {}, () => {});
-        }, 3000);
 
         // P2P 建立超时检测
         clearTimeout(connectDeadline);
@@ -251,9 +237,11 @@ const Net = (() => {
       else _routeMsg(msg);
     });
     c.on('close', () => {
-      lastP2pRecv = 0; // P2P 断开: 路由自动回退中继
-      // [稳定性修复] P2P 通道断开但中继仍在线: 静默切换, 不再弹"重连中"全屏遮罩打断对局
+      lastP2pRecv = 0; // P2P 断开
+      // [v77 修正] 仅在 P2P 真正断开时懒启动中继兜底(平时不常驻境外通道, 避免延迟尖刺)
+      // 若中继已连(初始失败回退场景)则静默切换; 否则懒启动中继, 失败才报连接中断
       if (mqttClient && mqttClient.connected) { progress('P2P 断开, 已自动切至中继通道'); return; }
+      if (roomCode) { progress('P2P 断开, 尝试中继兜底...'); _fallbackToRelay(roomCode, () => {}, () => emit('close')); return; }
       emit('close');
     });
     c.on('error', () => {
@@ -402,19 +390,14 @@ const Net = (() => {
   // ============ 通用接口 ============
   function send(obj) {
     obj.q = ++sendSeq;
-    const now = Date.now();
-    const p2pOk = !!(conn && conn.open);
-    const relayOk = !!(mqttClient && mqttClient.connected);
-    // P2P 优先: 直连可用时主走 P2P(直连延迟远低于公共 broker.emqx.io)
-    if (p2pOk) {
-      try { conn.send(obj); } catch (e) { lastP2pRecv = 0; }
+    // P2P 优先: 直连可用时一律走 P2P(同 WiFi/局域网延迟极低, 北京本地约 10~30ms)
+    // 仅当 P2P 彻底断开(conn 未 open)才退回中继 —— 不再因「P2P 短暂停滞」就切到境外
+    // 公共 broker.emqx.io, 那会引入 200ms+ 延迟尖刺(正是此前「加房延迟变大/掉线」的根因)
+    if (conn && conn.open) {
+      try { conn.send(obj); } catch (e) {}
+      return;
     }
-    // 仅当 P2P 不可用, 或 P2P 疑似停滞(>1.5s 未收到对端包)时, 才走中继兜底
-    // 避免把公共 broker 塞进热路径引入额外延迟/抖动
-    const p2pStale = p2pOk && (now - lastP2pRecv > 1500);
-    if (relayOk && (!p2pOk || p2pStale)) {
-      _relaySend(obj);
-    }
+    if (mqttClient && mqttClient.connected) _relaySend(obj);
   }
   function sendState(s) { send({ t: 'state', s }); }
   function sendInput(c) { send({ t: 'input', c }); }
