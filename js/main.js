@@ -142,6 +142,7 @@
     roomLobby.classList.add('hidden');
     gameWrap.classList.add('hidden');
     onlineHub.classList.add('hidden');
+    modeSelect.classList.add('hidden');
     leaveGame();
   }
   function showLobby() {
@@ -149,6 +150,7 @@
     roomLobby.classList.add('hidden');
     gameWrap.classList.add('hidden');
     onlineHub.classList.add('hidden');
+    modeSelect.classList.add('hidden');
     leaveGame();
     lobby.classList.remove('hidden');
     if (currentPlayer) {
@@ -164,6 +166,7 @@
     lobby.classList.add('hidden');
     roomLobby.classList.add('hidden');
     gameWrap.classList.add('hidden');
+    modeSelect.classList.add('hidden');
     onlineHub.classList.remove('hidden');
     leaveGame();
   }
@@ -300,8 +303,9 @@
   function showRoomLobby(code) {
     lobby.classList.add('hidden');
     gameWrap.classList.add('hidden');
-    roomLobby.classList.remove('hidden');
     onlineHub.classList.add('hidden');
+    modeSelect.classList.add('hidden');
+    roomLobby.classList.remove('hidden');
     leaveGame();
     roomLobbyCode.textContent = code;
     slotP1Name.textContent = currentPlayer ? currentPlayer.name : '玩家';
@@ -368,6 +372,7 @@
     lobby.classList.add('hidden');
     roomLobby.classList.add('hidden');
     onlineHub.classList.add('hidden');
+    modeSelect.classList.add('hidden');
     gameWrap.classList.remove('hidden');
     document.body.classList.add('in-game'); // CSS 切换: 隐藏 persistEdge, topCluster 升为顶栏
   }
@@ -393,6 +398,7 @@
     Net.close();
     hideRoomLobby();
     gameWrap.classList.add('hidden');
+    modeSelect.classList.add('hidden');
     leaveGame();
     lobby.classList.remove('hidden');
     Input.clear();
