@@ -707,7 +707,10 @@ body.in-game .top-cluster {
 }
 body.in-game .top-cluster > * { pointer-events: auto; }
 body.in-game .rtt-tag,
-body.in-game .mode-tag { font-size: 8px; }
+body.in-game .mode-tag { font-size: 9px; color: var(--text); }
+body.in-game .rtt-tag { color: var(--text); }
+body.in-game .mode-tag { color: var(--text); opacity: 0.85; }
+body.in-game .exit-mobile-btn { font-size: 11px; padding: 4px 10px; }
 
 /* 控制簇: 延迟 + 模式标签 + 退出键 —— 绝对定位于舞台(stage-wrap)右上角,
    浮在画布上方, 不再影响 HUD/画面流式布局; 恢复 v93 时代的旧布局 */

@@ -117,9 +117,11 @@
       const m = Net.getMode() === 'relay' ? '中继' : 'P2P';
       modeTag.textContent = Net.isConnected() ? '客户端 · ' + m : '客户端 · 重连中';
     }
-    // 实时 RTT 显示: 仅在联机模式显示, 离线隐藏; 按延迟高低变色(绿<80 / 黄<150 / 红)
+    // 实时 RTT/状态显示: 对局顶栏常驻, 离线显示「本地」, 联机显示「延迟 Xms / 测速中…」, 按延迟高低变色(绿<80 / 黄<150 / 红)
     if (game.mode === 'offline') {
-      rttTag.style.display = 'none';
+      rttTag.style.display = '';
+      rttTag.textContent = '本地';
+      rttTag.className = 'rtt-tag';
     } else {
       rttTag.style.display = '';
       const r = Net.getRtt();
@@ -696,14 +698,14 @@
 
   // ===== 更新公告: 点击版本号显示近三次更新(倒序: 最新在前; 每条用短句概括改动, 一点一换行; 每次发版须 prepend 一条真实版本) =====
   const CHANGELOG = [
+    ['v100', [
+      '对局顶栏常驻显示本地/延迟/模式'
+    ]],
     ['v99', [
       '对局时移除顶端常驻条, 退出/延迟/模式信息升为顶栏'
     ]],
     ['v98', [
       '恢复延迟/模式/退出簇到画布右上角(旧布局)'
-    ]],
-    ['v97', [
-      '退出键移回顶部条与血条之间'
     ]]
   ];
   const versionTag = document.getElementById('versionTag');
