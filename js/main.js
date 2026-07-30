@@ -47,6 +47,11 @@
   const btnRoomCancel = document.getElementById('btnRoomCancel');
   const roomLobbyStatus = document.getElementById('roomLobbyStatus');
 
+  // ===== DOM: 玩法选择屏(早期声明, 避免下方启动时分派 showLobby/showAuthScreen 触发 TDZ) =====
+  const modeSelect = document.getElementById('modeSelect');
+  const btnModeBack = document.getElementById('btnModeBack');
+  const btnModeAI = document.getElementById('btnModeAI');
+
   // ===== DOM: 游戏区 =====
   const gameWrap = document.getElementById('gameWrap');
   const elHpP1 = document.getElementById('hpP1');
@@ -544,11 +549,6 @@
   // 移动端独立退出按钮(复用 onExit 逻辑, 弹确认对话框并暂停游戏)
   const exitMobileBtn = document.getElementById('exitMobileBtn');
   if (exitMobileBtn) exitMobileBtn.addEventListener('click', onExit);
-
-  // ===== DOM: 玩法选择屏 =====
-  const modeSelect = document.getElementById('modeSelect');
-  const btnModeBack = document.getElementById('btnModeBack');
-  const btnModeAI = document.getElementById('btnModeAI');
 
   // ===== 大厅按钮 =====
   // 副本入口 → 改为进入「选择玩法」屏, 由屏内按钮再决定具体模式
