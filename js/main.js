@@ -594,8 +594,12 @@
       roleP2.textContent = '你';
       hudP2Name.textContent = currentPlayer ? currentPlayer.name : 'RED-X';
       showGame();
+      // [修复] 客户端加入后【不】立即开局: 只摆好初始阵型渲染一帧静态竞技场,
+      // 真正开始必须等房主点「开始对战」后发来的 start 信号 —— 否则会出现
+      // 「客户端自己直接进地图、房主却卡在等待大厅」的错位(原代码这里 game.start() 是元凶)
       game.resetMatch();
-      game.start();
+      game.state = 'fight'; // 等待期间静态渲染, 不显示 READY?/倒计时
+      game.draw();
       const mode = Net.getMode() === 'relay' ? '中继' : 'P2P';
       setStatus('已加入房间 ' + code + ' (' + mode + ')');
       showOverlay('已连接', '模式: ' + mode + '\n等待主机开始...', '');
@@ -704,6 +708,9 @@
 
   // ===== 更新公告: 点击版本号显示近三次更新(倒序: 最新在前; 每条用短句概括改动, 一点一换行; 每次发版须 prepend 一条真实版本) =====
   const CHANGELOG = [
+    ['v86', [
+      '修复客户端提前进图'
+    ]],
     ['v85', [
       '修复RTT标签显示'
     ]],
@@ -711,14 +718,6 @@
       '免费TURN打通对称NAT',
       '修复同网盲转中继',
       '中继双服务器备份'
-    ]],
-    ['v80', [
-      'RTT测速修复',
-      '跨网中继兜底',
-      '移除同受伤判负'
-    ]],
-    ['v77', [
-      '修复联机回退境外中继'
     ]]
   ];
   const versionTag = document.getElementById('versionTag');
