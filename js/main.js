@@ -263,7 +263,7 @@
     }
   }
 
-  // 分享到世界: 点击即分享(重复点击=刷新分享时间), 1 秒后按钮自动恢复默认状态可再次点击
+  // 分享到世界: 点击即分享(重复点击=刷新分享时间), 2 秒后按钮自动恢复默认状态可再次点击
   let shareCooldown = false;
   btnShareWorld.addEventListener('click', () => {
     if (shareCooldown) return; // 冷却期内直接忽略
@@ -271,7 +271,9 @@
     World.shareRoom(code, currentPlayer ? currentPlayer.name : '玩家', currentPlayer ? currentPlayer.id : '', Net.getMode() === 'relay' ? '中继' : 'P2P');
     sharedToWorld = true; // 退出房间时据此 stopShare
     btnShareWorld.classList.add('shared');
-    btnShareWorld.textContent = '已分享 ✓';
+    // 首次分享显示"已分享", 之后再次分享显示"已再次分享"以区分
+    btnShareWorld.textContent = btnShareWorld.dataset.sharedBefore ? '已再次分享 ✓' : '已分享 ✓';
+    btnShareWorld.dataset.sharedBefore = '1';
     roomLobbyStatus.textContent = '房间已分享到世界频道';
     shareCooldown = true;
     btnShareWorld.disabled = true;
@@ -280,7 +282,7 @@
       btnShareWorld.disabled = false;
       btnShareWorld.classList.remove('shared');
       btnShareWorld.textContent = '分享到世界';
-    }, 1000);
+    }, 2000);
   });
 
   // 房间开始/取消
@@ -292,6 +294,7 @@
   });
   btnRoomCancel.addEventListener('click', () => {
     hideRoomLobby();
+    btnShareWorld.dataset.sharedBefore = ''; // 离开房间后, 下次分享重新从"已分享"开始
     Net.close();
     // 关键修复: 返回大厅时必须解除创建/加入按钮的禁用, 否则 btnHost 会一直被锁死(创建房间后无法再次创建)
     btnHost.disabled = false;
@@ -669,11 +672,13 @@
     });
   }
 
-  // ===== 更新公告: 点击右下角版本号显示近三次更新 =====
+  // ===== 更新公告: 点击右下角版本号显示近五次更新 =====
   const CHANGELOG = [
     ['v51', '联机稳定性大修'],
     ['v44', '修复幻影伤害'],
-    ['v43', '游客账号固定']
+    ['v43', '游客账号固定'],
+    ['v41', '建房按钮修复'],
+    ['v39', '刷新键移右上']
   ];
   const versionTag = document.getElementById('versionTag');
   const changelogPop = document.getElementById('changelogPop');
