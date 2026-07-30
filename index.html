@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#1b1b40">
 <meta name="format-detection" content="telephone=no">
 <title>PIXEL MECH ARENA · 像素机甲竞技场</title>
-<link rel="stylesheet" href="css/style.css?v=96">
+<link rel="stylesheet" href="css/style.css?v=97">
 </head>
 <body>
 <div id="app">
@@ -18,7 +18,7 @@
   <!-- ===== 全局常驻边缘: 规则 + 版本号(所有界面可见, 不滚动即可见) ===== -->
   <div id="persistEdge">
     <button id="rulesBtn" class="edge-btn" aria-label="游戏规则">规则?</button>
-    <span id="versionTag" class="version-tag">v96</span>
+    <span id="versionTag" class="version-tag">v97</span>
   </div>
 
   <!-- ===== 登录界面 ===== -->
@@ -161,6 +161,12 @@
 
   <!-- ===== 游戏区(联机/离线共用) ===== -->
   <div id="gameWrap" class="hidden">
+    <!-- 控制簇: 延迟 + 模式 + 退出, 位于顶部常驻条与血条 HUD 之间 -->
+    <div id="topCluster" class="top-cluster">
+      <span id="rttTag" class="rtt-tag">…</span>
+      <span id="gameModeTag" class="mode-tag">离线</span>
+      <button id="exitMobileBtn" class="exit-mobile-btn" aria-label="退出房间">退出</button>
+    </div>
     <div id="hud">
       <div class="player-hud left">
         <div class="name"><span id="hudP1Name">BLUE-01</span> <span class="role" id="roleP1">玩家</span></div>
@@ -190,11 +196,6 @@
           <p id="overlayText"></p>
           <button id="startBtn">开始对战</button>
           <button id="cancelBtn" class="cancel-btn hidden">返回大厅</button>
-        </div>
-        <div id="topCluster" class="top-cluster">
-          <span id="rttTag" class="rtt-tag">…</span>
-          <span id="gameModeTag" class="mode-tag">离线</span>
-          <button id="exitMobileBtn" class="exit-mobile-btn" aria-label="退出房间">退出</button>
         </div>
       </div>
     </div>
@@ -261,16 +262,16 @@
 
 </div>
 
-<script src="vendor/peerjs.min.js?v=96"></script>
-<script src="vendor/mqtt.min.js?v=96"></script>
-<script src="js/auth.js?v=96"></script>
-<script src="js/world.js?v=96"></script>
-<script src="js/input.js?v=96"></script>
-<script src="js/touch.js?v=96"></script>
-<script src="js/sprite.js?v=96"></script>
-<script src="js/player.js?v=96"></script>
-<script src="js/net.js?v=96"></script>
-<script src="js/game.js?v=96"></script>
-<script src="js/main.js?v=96"></script>
+<script src="vendor/peerjs.min.js?v=97"></script>
+<script src="vendor/mqtt.min.js?v=97"></script>
+<script src="js/auth.js?v=97"></script>
+<script src="js/world.js?v=97"></script>
+<script src="js/input.js?v=97"></script>
+<script src="js/touch.js?v=97"></script>
+<script src="js/sprite.js?v=97"></script>
+<script src="js/player.js?v=97"></script>
+<script src="js/net.js?v=97"></script>
+<script src="js/game.js?v=97"></script>
+<script src="js/main.js?v=97"></script>
 </body>
 </html>

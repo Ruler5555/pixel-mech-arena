@@ -684,24 +684,22 @@ button:active:not(:disabled) { transform: translateY(2px); }
 }
 #game { display: block; width: 100%; height: auto; image-rendering: pixelated; background: #000; }
 
-/* 顶部右侧控制簇: 模式标签 + 退出键 —— 绝对定位于竞技场(stage-wrap)右上角,
-   悬浮在画布上方, 不再与 HUD(血量/回合)重叠; 仅在结算覆盖层下隐藏 */
+/* 控制簇: 延迟 + 模式标签 + 退出键 —— 流式布局的一行,
+   位于顶部常驻条(#persistEdge)与血条 HUD 之间, 靠右; 游戏画面和血量信息随之下移 */
 .top-cluster {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  z-index: 35;
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 6px;
   padding: 5px 8px;
+  margin-bottom: 6px;
   background: rgba(20,20,50,0.6);
   border: 2px solid var(--border);
   border-radius: 10px;
   box-shadow: 0 0 0 2px var(--panel2);
-  pointer-events: none;
+  width: fit-content;
+  margin-left: auto;
 }
-.top-cluster > * { pointer-events: auto; }
 .mode-tag { font-size: 7px; color: var(--dim); letter-spacing: 1px; }
 .rtt-tag { font-size: 7px; letter-spacing: 1px; color: var(--dim); min-width: 32px; text-align: right; font-variant-numeric: tabular-nums; }
 .rtt-tag.good { color: #4ade80; }
