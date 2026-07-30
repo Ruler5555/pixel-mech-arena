@@ -54,53 +54,67 @@ const Net = (() => {
       role = 'host';
       roomCode = genCode();
       progress('正在连接信令服务器...');
+      let resolved = false;
+      // 统一出口: 无论 P2P 还是中继连上, 都 resolve hostRoom, 否则建房会永远卡住
+      const finish = (code) => {
+        if (resolved) return;
+        resolved = true;
+        _startKeepAlive();
+        resolve(code);
+      };
+      const toRelay = () => {
+        if (resolved) return;
+        progress('P2P 信令不可用, 切换中继模式...');
+        mode = 'relay';
+        relayTopic = 'pma26/' + roomCode;
+        _relayConnect(roomCode, () => finish(roomCode), () => {
+          progress('中继连接失败, 请检查网络后重试');
+          reject(new Error('中继连接失败'));
+        });
+      };
       try {
         peer = new Peer(PEER_PREFIX + roomCode, { debug: 1, config: ICE_SERVERS });
       } catch (e) { reject(e); return; }
 
       peer.on('open', () => {
-        progress('信令已就绪,等待对手...');
-        _startKeepAlive();
-        resolve(roomCode);
-        // 3 秒后若仍无 P2P 连接,并行启动中继监听
-        // 这样无论 client 走 P2P 还是中继都能连上
+        progress('信令已就绪, 等待对手...');
+        finish(roomCode);
+        // P2P 已就绪仍并行启动中继作为备份通道(双通道互备)
         setTimeout(() => {
-          if (!conn || !conn.open) {
-            progress('P2P 等待较久,并行启动中继...');
-            relayTopic = 'pma26/' + roomCode;
-            _relayConnect(roomCode, () => {}, () => {});
-          }
+          if (mqttClient && mqttClient.connected) return;
+          progress('并行启动中继备份通道...');
+          relayTopic = 'pma26/' + roomCode;
+          _relayConnect(roomCode, () => {}, () => {});
         }, 3000);
       });
 
       peer.on('connection', (c) => {
         if (conn && conn.open) { c.close(); return; }
-        // 若已切到中继且中继已连,忽略 P2P
+        // 若已切到中继且中继已连, 忽略 P2P 连接(以中继为准)
         if (mode === 'relay' && mqttClient && mqttClient.connected) { c.close(); return; }
         conn = c;
         bindConn(c);
       });
 
       peer.on('disconnected', () => {
-        progress('信令断开,尝试重连...');
+        progress('信令断开, 尝试重连...');
         try { peer.reconnect(); } catch(e){}
       });
 
       peer.on('error', (err) => {
         if (err.type === 'unavailable-id') {
-          progress('房号冲突,换号重试...');
+          progress('房号冲突, 换号重试...');
           peer.destroy(); roomCode = genCode();
           setTimeout(() => _p2pHost().then(resolve, reject), 200);
           return;
         }
-        // 其他错误: 自动切中继
-        progress('信令错误: ' + err.type + ',切换中继...');
-        if (!conn || !conn.open) {
-          relayTopic = 'pma26/' + roomCode;
-          mode = 'relay';
-          _relayConnect(roomCode, () => {}, () => {});
-        }
+        // 其他错误(含信令服务器被墙/不可达): 自动切中继
+        progress('信令错误: ' + err.type + ', 切换中继...');
+        if (!resolved) toRelay();
       });
+
+      // 兜底: 4 秒内信令仍未就绪(如 peerjs 云被墙), 直接切中继, 避免无限等待
+      setTimeout(() => { if (!resolved) toRelay(); }, 4000);
     });
   }
 
@@ -131,7 +145,7 @@ const Net = (() => {
             progress('P2P 连接超时(可能 NAT 穿透失败),尝试中继模式...');
             _fallbackToRelay(code, resolve, reject);
           }
-        }, 10000);
+        }, 4500);
 
         conn.on('open', () => {
           clearTimeout(connectDeadline);
@@ -324,9 +338,12 @@ const Net = (() => {
 
   // ============ 通用接口 ============
   function send(obj) {
-    if (mode === 'relay') { _relaySend(obj); return; }
+    // 双通道广播: P2P 与中继只要连上就发(对端只监听其中一个, 不会重复)
     if (conn && conn.open) {
       try { conn.send(obj); } catch (e) {}
+    }
+    if (mqttClient && mqttClient.connected) {
+      _relaySend(obj);
     }
   }
   function sendState(s) { send({ t: 'state', s }); }
@@ -338,11 +355,10 @@ const Net = (() => {
 
   function getRole() { return role; }
   function isConnected() {
-    if (mode === 'relay') return !!(mqttClient && mqttClient.connected);
-    return !!(conn && conn.open);
+    return !!(conn && conn.open) || !!(mqttClient && mqttClient.connected);
   }
   function getRoomCode() { return roomCode; }
-  function getMode() { return mode; }
+  function getMode() { return (mqttClient && mqttClient.connected) ? 'relay' : 'p2p'; }
 
   function _cleanupP2P() {
     _stopKeepAlive();

@@ -480,6 +480,12 @@ class Game {
       attacker._hitDone = true;
       this.shake = result < 0 ? 0.12 : (attacker.atk && attacker.atk.type === 'H' ? 0.35 : 0.18);
       this._spawnHitFX(hb.x + hb.w / 2, hb.y + hb.h / 2, result < 0, attacker.atk && attacker.atk.type === 'H');
+      // 受击触觉反馈: 仅本地玩家被命中(非防御)时震动 30ms, 避免对手挨打也震玩家
+      const localIsDefender = (this.localPlayer === 1 && defender === this.p1)
+                           || (this.localPlayer === 2 && defender === this.p2);
+      if (localIsDefender && result >= 0 && navigator.vibrate) {
+        try { navigator.vibrate(30); } catch (_) {}
+      }
     }
   }
 

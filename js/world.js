@@ -21,8 +21,14 @@ const World = (() => {
   let updateCallbacks = [];    // 房间列表更新回调
 
   // ============ 回调管理 ============
+  // 去重注册: 同一函数只保留一份, 避免多次进入大厅导致重复渲染
   function onUpdate(fn) {
-    if (typeof fn === 'function') updateCallbacks.push(fn);
+    if (typeof fn !== 'function') return;
+    if (!updateCallbacks.includes(fn)) updateCallbacks.push(fn);
+  }
+  // 清空所有回调(供 close/destroy 调用, 防止旧引用泄漏)
+  function clearCallbacks() {
+    updateCallbacks.length = 0;
   }
   // 触发所有更新回调, 传入房间列表副本
   function emitUpdate() {
@@ -215,6 +221,8 @@ const World = (() => {
     selfPlayerId = null;
     // 通知 UI 列表已清空
     emitUpdate();
+    // 清空回调, 防止下次进入大厅时旧回调残留
+    clearCallbacks();
   }
 
   return {

@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#1a1a2e">
 <meta name="format-detection" content="telephone=no">
 <title>PIXEL MECH ARENA · 像素机甲竞技场</title>
-<link rel="stylesheet" href="css/style.css?v=27">
+<link rel="stylesheet" href="css/style.css?v=34">
 </head>
 <body>
 <div id="app">
@@ -46,7 +46,7 @@
 
   <!-- ===== 主菜单/大厅 ===== -->
   <div id="lobby" class="hidden">
-    <span class="version-tag">v27</span>
+    <span class="version-tag">v34</span>
 
     <!-- 玩家信息条 -->
     <div class="player-bar">
@@ -178,10 +178,13 @@
     </div>
 
     <div id="touchControls" class="touch-controls">
-      <div class="dpad">
-        <button class="tbtn pad left"  data-act="left"  aria-label="左">◀</button>
-        <button class="tbtn pad right" data-act="right" aria-label="右">▶</button>
+      <div class="move-zone" id="moveZone" aria-label="移动区">
+        <div class="stick-base">
+          <div class="stick-knob" id="stickKnob"></div>
+        </div>
+        <span class="move-hint">滑动移动</span>
       </div>
+      <button id="exitMobileBtn" class="exit-mobile-btn" aria-label="退出房间">退出</button>
       <div class="action-cluster">
         <button class="tbtn act defend" data-act="defend" aria-label="防御">防</button>
         <button class="tbtn act jump"   data-act="jump"   aria-label="跳跃">跳</button>
@@ -203,14 +206,14 @@
 
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script src="https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js"></script>
-<script src="js/auth.js?v=27"></script>
-<script src="js/world.js?v=27"></script>
-<script src="js/input.js?v=27"></script>
-<script src="js/touch.js?v=27"></script>
-<script src="js/sprite.js?v=27"></script>
-<script src="js/player.js?v=27"></script>
-<script src="js/net.js?v=27"></script>
-<script src="js/game.js?v=27"></script>
-<script src="js/main.js?v=27"></script>
+<script src="js/auth.js?v=34"></script>
+<script src="js/world.js?v=34"></script>
+<script src="js/input.js?v=34"></script>
+<script src="js/touch.js?v=34"></script>
+<script src="js/sprite.js?v=34"></script>
+<script src="js/player.js?v=34"></script>
+<script src="js/net.js?v=34"></script>
+<script src="js/game.js?v=34"></script>
+<script src="js/main.js?v=34"></script>
 </body>
 </html>

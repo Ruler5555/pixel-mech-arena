@@ -386,6 +386,13 @@
   exitBtn.addEventListener('click', onExit);
   exitBtn.addEventListener('pointerdown', onExit);
 
+  // 移动端独立退出按钮(复用 onExit 逻辑, 弹确认对话框并暂停游戏)
+  const exitMobileBtn = document.getElementById('exitMobileBtn');
+  if (exitMobileBtn) {
+    exitMobileBtn.addEventListener('click', onExit);
+    exitMobileBtn.addEventListener('pointerdown', onExit);
+  }
+
   // 刷新对局
   const onResync = (e) => {
     e.preventDefault();
