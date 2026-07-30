@@ -168,11 +168,11 @@ body {
 
 /* 快速登录(主入口): 大而显眼 */
 .auth-quick {
+  position: relative;
   width: 100%;
   display: flex;
   justify-content: center;
   align-items: center;
-  gap: 6px;
   font-family: inherit;
   font-size: 14px;
   font-weight: 700;
@@ -191,9 +191,20 @@ body {
 }
 .auth-quick:hover { filter: brightness(1.1); }
 .auth-quick:active { transform: translateY(2px); box-shadow: 0 2px 0 var(--border); }
-/* 快速登录: 图标靠左 + 文字居中(图标略左移使四字视觉居中) */
-.auth-quick .ql-ico { transform: translateX(-2px); }
-.auth-quick .ql-txt { letter-spacing: 2px; }
+/* 快速登录: 图标绝对定位于左侧, 文字占满整宽居中 -> 任意屏幕比例下"快速登录"都精确居中 */
+.auth-quick .ql-ico {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 15px;
+}
+.auth-quick .ql-txt {
+  display: block;
+  width: 100%;
+  text-align: center;
+  letter-spacing: 2px;
+}
 .auth-quick-tip {
   font-size: 7px;
   color: var(--dim);

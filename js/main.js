@@ -271,9 +271,8 @@
     World.shareRoom(code, currentPlayer ? currentPlayer.name : '玩家', currentPlayer ? currentPlayer.id : '', Net.getMode() === 'relay' ? '中继' : 'P2P');
     sharedToWorld = true; // 退出房间时据此 stopShare
     btnShareWorld.classList.add('shared');
-    // 首次分享显示"已分享", 之后再次分享显示"已再次分享"以区分
-    btnShareWorld.textContent = btnShareWorld.dataset.sharedBefore ? '已再次分享 ✓' : '已分享 ✓';
-    btnShareWorld.dataset.sharedBefore = '1';
+    // 点击反馈统一显示"已分享", 恢复后的空闲文案按是否已分享过区分: 首次=分享到世界, 之后=再次分享到世界
+    btnShareWorld.textContent = '已分享 ✓';
     roomLobbyStatus.textContent = '房间已分享到世界频道';
     shareCooldown = true;
     btnShareWorld.disabled = true;
@@ -281,7 +280,7 @@
       shareCooldown = false;
       btnShareWorld.disabled = false;
       btnShareWorld.classList.remove('shared');
-      btnShareWorld.textContent = '分享到世界';
+      btnShareWorld.textContent = sharedToWorld ? '再次分享到世界' : '分享到世界';
     }, 2000);
   });
 
@@ -294,7 +293,8 @@
   });
   btnRoomCancel.addEventListener('click', () => {
     hideRoomLobby();
-    btnShareWorld.dataset.sharedBefore = ''; // 离开房间后, 下次分享重新从"已分享"开始
+    btnShareWorld.textContent = '分享到世界'; // 离开房间后, 下次分享重新从"分享到世界"开始
+    btnShareWorld.classList.remove('shared');
     Net.close();
     // 关键修复: 返回大厅时必须解除创建/加入按钮的禁用, 否则 btnHost 会一直被锁死(创建房间后无法再次创建)
     btnHost.disabled = false;
@@ -674,6 +674,10 @@
 
   // ===== 更新公告: 点击版本号显示近三次更新(倒序: 最新在前; 每条用短句概括改动, 一点一换行; 每次发版须 prepend 一条真实版本) =====
   const CHANGELOG = [
+    ['v64', [
+      '分享键文案修正',
+      '快速登录真居中'
+    ]],
     ['v62', [
       '版本规则回退按条数',
       '快速登录居中已修',
@@ -683,11 +687,6 @@
       '快速登录文字居中',
       '大厅建房按钮加粗',
       '公告改内容概括'
-    ]],
-    ['v57', [
-      '快速登录加粗加大',
-      '版本号移登录界面',
-      '公告倒序显示'
     ]]
   ];
   const versionTag = document.getElementById('versionTag');
