@@ -69,9 +69,9 @@ class Mech {
     if (this.defending) return false;
 
     if (type === 'L') {
-      this.atk = { type, duration: 0.40, activeStart: 0.10, activeEnd: 0.20, dmg: 8,  reach: 50, height: 50, cd: 0.25 };
+      this.atk = { type, duration: 0.34, activeStart: 0.08, activeEnd: 0.18, dmg: 8,  reach: 50, height: 50, cd: 0.14 };
     } else {
-      this.atk = { type, duration: 1.00, activeStart: 0.30, activeEnd: 0.42, dmg: 14, reach: 64, height: 60, cd: 0.60 };
+      this.atk = { type, duration: 0.86, activeStart: 0.26, activeEnd: 0.40, dmg: 14, reach: 64, height: 60, cd: 0.40 };
     }
     this.setState('atk' + type);
     this._hitDone = false; // 每次新攻击重新武装, 保证"一次攻击只命中一次"
@@ -83,7 +83,7 @@ class Mech {
     if (this.state === 'ko') return 0;
     // 防御减伤
     if (this.defending && this.state === 'defend') {
-      const reduced = Math.round(dmg * 0.4);
+      const reduced = Math.round(dmg * 0.5);
       this.hp = Math.max(0, this.hp - reduced);
       this.flash = 0.12;
       // 防御时仍受小幅击退但不进入 hurt
@@ -165,7 +165,7 @@ class Mech {
         if (ctrl.left)  dir -= 1;
         if (ctrl.right) dir += 1;
       }
-      this.vx = dir * 3.0; // [TUNE] 原 2.2, 玩家反馈偏慢, 提升至 3.0 (~+36%)
+      this.vx = dir * 3.6; // [TUNE] 移速 2.2→3.0→3.6, 持续提升手感(不过分)
 
       // 跳跃(含二段跳 + 冷却CD)
       if (ctrl.tapJump && !attacking && !this.defending && this.jumpCD <= 0) {

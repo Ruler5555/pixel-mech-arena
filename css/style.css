@@ -169,8 +169,10 @@ body {
 /* 快速登录(主入口): 大而显眼 */
 .auth-quick {
   width: 100%;
-  display: block;
-  text-align: center;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
   font-family: inherit;
   font-size: 14px;
   font-weight: 700;
@@ -189,6 +191,9 @@ body {
 }
 .auth-quick:hover { filter: brightness(1.1); }
 .auth-quick:active { transform: translateY(2px); box-shadow: 0 2px 0 var(--border); }
+/* 快速登录: 图标靠左 + 文字居中(图标略左移使四字视觉居中) */
+.auth-quick .ql-ico { transform: translateX(-2px); }
+.auth-quick .ql-txt { letter-spacing: 2px; }
 .auth-quick-tip {
   font-size: 7px;
   color: var(--dim);
@@ -306,6 +311,8 @@ body {
 .cl-title { font-size: 8px; color: var(--accent2); letter-spacing: 1px; margin-bottom: 8px; }
 .cl-item { font-size: 7px; color: var(--text); line-height: 2.2; white-space: nowrap; }
 .cl-ver { color: var(--gold); margin-right: 8px; }
+.cl-points { margin: 2px 0 6px; line-height: 2.4; }
+.cl-pt { font-size: 7px; color: var(--text); white-space: nowrap; }
 
 .lobby-content {
   display: flex;

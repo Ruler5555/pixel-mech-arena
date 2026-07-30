@@ -672,13 +672,23 @@
     });
   }
 
-  // ===== 更新公告: 点击版本号显示近五次更新(倒序: 最新在前; 每次发版须 prepend 一条真实版本+内容概括) =====
+  // ===== 更新公告: 点击版本号显示近三次更新(倒序: 最新在前; 每条用短句概括改动, 一点一换行; 每次发版须 prepend 一条真实版本) =====
   const CHANGELOG = [
-    ['v58', '快速登录文字居中·大厅建房加粗·公告补内容概括'],
-    ['v57', '快速登录加粗加大·版本号与公告移登录界面·公告倒序'],
-    ['v54', '公告改5条·快速登录表述修正·分享键2秒提示'],
-    ['v51', '联机双通道去重·金色描边·双方确认再来'],
-    ['v44', '修复单机联机幻影伤害']
+    ['v62', [
+      '版本规则回退按条数',
+      '快速登录居中已修',
+      '对战平衡性优化'
+    ]],
+    ['v59', [
+      '快速登录文字居中',
+      '大厅建房按钮加粗',
+      '公告改内容概括'
+    ]],
+    ['v57', [
+      '快速登录加粗加大',
+      '版本号移登录界面',
+      '公告倒序显示'
+    ]]
   ];
   const versionTag = document.getElementById('versionTag');
   const changelogPop = document.getElementById('changelogPop');
@@ -686,7 +696,9 @@
   if (lobbyVersion && versionTag) lobbyVersion.textContent = versionTag.textContent; // 大厅静态版本号与登录界面同步
   if (versionTag && changelogPop) {
     changelogPop.innerHTML = '<div class="cl-title">更新公告</div>' +
-      CHANGELOG.map(c => '<div class="cl-item"><span class="cl-ver">' + c[0] + '</span>' + c[1] + '</div>').join('');
+      CHANGELOG.map(c => '<div class="cl-item"><span class="cl-ver">' + c[0] + '</span><div class="cl-points">' +
+        c[1].map(p => '<div class="cl-pt">· ' + p + '</div>').join('') +
+        '</div></div>').join('');
     versionTag.addEventListener('click', (e) => {
       e.stopPropagation();
       changelogPop.classList.toggle('hidden');

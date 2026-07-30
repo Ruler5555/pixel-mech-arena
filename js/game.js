@@ -505,6 +505,15 @@ class Game {
       attacker._hitDone = true;
       this.shake = result < 0 ? 0.12 : (attacker.atk && attacker.atk.type === 'H' ? 0.35 : 0.18);
       this._spawnHitFX(hb.x + hb.w / 2, hb.y + hb.h / 2, result < 0, attacker.atk && attacker.atk.type === 'H');
+      // 防御反伤: 盾牌减伤50% + 反伤50% 给攻击者
+      if (result < 0) {
+        const reflected = Math.round(hb.dmg * 0.5);
+        attacker.hp = Math.max(0, attacker.hp - reflected);
+        attacker.flash = 0.15;
+        attacker.vx += (attacker.x >= defender.x ? 1 : -1) * 0.5;
+        if (attacker.hp <= 0) { attacker.setState('ko'); attacker.vy = 3; }
+        this._spawnHitFX(attacker.x, attacker.y - 40, true, false);
+      }
       // 受击触觉反馈: 仅本地玩家被命中(非防御)时震动 30ms, 避免对手挨打也震玩家
       const localIsDefender = (this.localPlayer === 1 && defender === this.p1)
                            || (this.localPlayer === 2 && defender === this.p2);
