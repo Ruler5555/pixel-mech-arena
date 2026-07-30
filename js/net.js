@@ -35,6 +35,7 @@ const Net = (() => {
   // 会覆盖新状态(画面回跳)/重复触发攻击(重复出招), 用单调序号 q 丢弃重复与过期包
   let sendSeq = 0;     // 发送序号
   let lastRecvSeq = 0; // 已处理的最大对端序号
+  let lastP2pRecv = 0; // 最近一次收到 P2P 包的时间(ms), 用于判断 P2P 是否停滞
 
   // [致命修复] 旧版事件表漏了 reset/resync 键: on('reset')/on('resync') 注册进的是
   // 临时数组, 回调被静默丢弃 —— 主机重开对局客户端永远收不到、客户端请求刷新主机
@@ -147,6 +148,13 @@ const Net = (() => {
         // 等关键控制消息, 导致"主机点了开始/重开, 客户端没反应"; 状态包小且 30Hz, 可靠通道足够流畅
         conn = peer.connect(PEER_PREFIX + code, { reliable: true, serialization: 'json' });
         bindConn(conn);
+        // P2P 建立后并行启动中继备份通道(与 host 对称), 使 P2P 中断时能无缝回退中继
+        setTimeout(() => {
+          if (mqttClient && mqttClient.connected) return;
+          progress('并行启动中继备份通道...');
+          relayTopic = 'pma26/' + code;
+          _relayConnect(code, () => {}, () => {});
+        }, 3000);
 
         // P2P 建立超时检测
         clearTimeout(connectDeadline);
@@ -217,10 +225,12 @@ const Net = (() => {
     c.on('data', (msg) => {
       if (!msg || !msg.t) return;
       if (!_acceptSeq(msg)) return;
+      lastP2pRecv = Date.now(); // 标记 P2P 活跃, 用于自适应路由判定
       if (msg.t === 'hello') emit('connected', { name: msg.n || '' });
       else _routeMsg(msg);
     });
     c.on('close', () => {
+      lastP2pRecv = 0; // P2P 断开: 路由自动回退中继
       // [稳定性修复] P2P 通道断开但中继仍在线: 静默切换, 不再弹"重连中"全屏遮罩打断对局
       if (mqttClient && mqttClient.connected) { progress('P2P 断开, 已自动切至中继通道'); return; }
       emit('close');
@@ -369,12 +379,18 @@ const Net = (() => {
 
   // ============ 通用接口 ============
   function send(obj) {
-    // 双通道广播: P2P 与中继只要连上就发; 两份拷贝带同一序号 q, 接收端自动丢弃慢的那份
     obj.q = ++sendSeq;
-    if (conn && conn.open) {
-      try { conn.send(obj); } catch (e) {}
+    const now = Date.now();
+    const p2pOk = !!(conn && conn.open);
+    const relayOk = !!(mqttClient && mqttClient.connected);
+    // P2P 优先: 直连可用时主走 P2P(直连延迟远低于公共 broker.emqx.io)
+    if (p2pOk) {
+      try { conn.send(obj); } catch (e) { lastP2pRecv = 0; }
     }
-    if (mqttClient && mqttClient.connected) {
+    // 仅当 P2P 不可用, 或 P2P 疑似停滞(>1.5s 未收到对端包)时, 才走中继兜底
+    // 避免把公共 broker 塞进热路径引入额外延迟/抖动
+    const p2pStale = p2pOk && (now - lastP2pRecv > 1500);
+    if (relayOk && (!p2pOk || p2pStale)) {
       _relaySend(obj);
     }
   }
@@ -391,7 +407,11 @@ const Net = (() => {
     return !!(conn && conn.open) || !!(mqttClient && mqttClient.connected);
   }
   function getRoomCode() { return roomCode; }
-  function getMode() { return (mqttClient && mqttClient.connected) ? 'relay' : 'p2p'; }
+  function getMode() {
+    if (conn && conn.open) return 'p2p';
+    if (mqttClient && mqttClient.connected) return 'relay';
+    return 'p2p';
+  }
 
   function _cleanupP2P() {
     _stopKeepAlive();
@@ -405,7 +425,7 @@ const Net = (() => {
     try { if (mqttClient) mqttClient.end(true); } catch(e){}
     mqttClient = null; relayTopic = null;
     role = null; roomCode = null; mode = 'p2p';
-    sendSeq = 0; lastRecvSeq = 0; // 新会话重置去重序号
+    sendSeq = 0; lastRecvSeq = 0; lastP2pRecv = 0; // 新会话重置去重/路由状态
   }
 
   return {

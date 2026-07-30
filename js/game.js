@@ -123,10 +123,12 @@ class Game {
     // 联机: 同步计时器(主机 30Hz 广播, 配合插值足够流畅)
     this.syncAcc = 0;
     this.netLatency = 0; // 估算
-    // 客户端插值: 对手机甲位置走 lerp, 避免网络抖动导致画面跳跃
+    // 客户端插值: 对手机甲走「渲染延迟缓冲」——所有状态(位置/动画/受伤)都从按时间排序的
+    // 缓冲里以固定延迟回放, 保证动画与位移永远来自同一帧(彻底消除跳跃动画与身体不同步)
     this.interp = {
-      foeTargetX: 0, foeTargetY: 0,
-      foeHasTarget: false
+      buffer: [],          // [{ t: 收包时间(s), d: 序列化机甲 }]
+      delay: 0.10,         // 渲染延迟 100ms(与 30Hz 广播配合, 约缓冲 3 帧)
+      prevFoeHp: undefined // 上一帧回放的对手血量, 用于对齐受伤 FX
     };
     // 输入变化检测(减少带宽: 只在输入变化时发送)
     this._lastSentInput = null;
@@ -160,6 +162,8 @@ class Game {
 
   startRound() {
     this._resetMechs();
+    this.interp.buffer.length = 0;
+    this.interp.prevFoeHp = undefined;
     this.timer = 60;
     this.timerAcc = 0;
     this.particles = [];
@@ -347,24 +351,22 @@ class Game {
           this._lastStateFrame - s.frame < 3600) return;
       this._lastStateFrame = s.frame;
     }
-    // 客户端检测 hit: hp 下降时本地生成粒子(近似攻击者武器位置)
-    const prevHp1 = this.p1.hp, prevHp2 = this.p2.hp;
-    // 对手机甲: 仅记录插值目标位置(由 _interpFoe 每帧 lerp 逼近)
-    // 本地玩家: 权威修正 —— 只修正关键状态, 位置做软纠偏避免硬拉
+    // 本地玩家: 权威软纠偏(位置保留预测, 关键字段即时修正) + 本地受伤 FX 即时
+    // 对手机甲: 压入渲染延迟缓冲, 由 _interpFoe 回放(动画/位置/受伤 FX 同帧, 消除不同步)
     if (this.localPlayer === 2) {
-      // 本地=P2, 对手=P1
-      this._setFoeTarget(this.p1, s.p1);
-      this._applyMechSoft(this.p2, s.p2); // 本地软纠偏
+      const localPrevHp = this.p2.hp;
+      this._setFoeTarget(this.p1, s.p1);          // 对手 P1 -> 缓冲
+      this._applyMechSoft(this.p2, s.p2);         // 本地 P2
+      if (localPrevHp - this.p2.hp >= 4) {
+        this._spawnHitFX(this.p2.x + (this.p1.x > this.p2.x ? 20 : -20), this.p2.y - 40, false, (localPrevHp - this.p2.hp) >= 15);
+      }
     } else {
-      // 本地=P1, 对手=P2
-      this._applyMechSoft(this.p1, s.p1);
-      this._setFoeTarget(this.p2, s.p2);
-    }
-    if (prevHp1 - s.p1.hp >= 4) {
-      this._spawnHitFX(s.p1.x + (s.p2.x > s.p1.x ? -20 : 20), s.p1.y - 40, false, (prevHp1 - s.p1.hp) >= 15);
-    }
-    if (prevHp2 - s.p2.hp >= 4) {
-      this._spawnHitFX(s.p2.x + (s.p1.x > s.p2.x ? -20 : 20), s.p2.y - 40, false, (prevHp2 - s.p2.hp) >= 15);
+      const localPrevHp = this.p1.hp;
+      this._applyMechSoft(this.p1, s.p1);         // 本地 P1
+      this._setFoeTarget(this.p2, s.p2);          // 对手 P2 -> 缓冲
+      if (localPrevHp - this.p1.hp >= 4) {
+        this._spawnHitFX(this.p1.x + (this.p2.x > this.p1.x ? 20 : -20), this.p1.y - 40, false, (localPrevHp - this.p1.hp) >= 15);
+      }
     }
     this.round = s.round;
     this.winsP1 = s.winsP1;
@@ -417,58 +419,77 @@ class Game {
     if (dx > 30) { m.x = d.x; m.y = d.y; m.vx = d.vx; m.vy = d.vy; }
     m.onGround = (m.y >= this.groundY);
   }
-  // 对手机甲: 仅记录插值目标(位置由 _interpFoe 每帧 lerp 逼近)
-  // 非位置字段(hp/state/frame/cooldown 等)直接应用, 保证状态及时同步
+  // 对手机甲: 仅把快照压入渲染延迟缓冲, 真正的应用(位置/动画/受伤)在 _interpFoe 回放
+  // 这样动画与位移来自同一帧, 跳跃/击退等动作两端完全同步
   _setFoeTarget(m, d) {
     if (!d) return;
-    // 先记录是否检测到跳跃事件(后面字段同步后再应用, 避免被覆盖)
-    const jumpTriggered = (d.js !== undefined && d.js > m.jumpSeq);
-
-    this.interp.foeTargetX = d.x;
-    this.interp.foeTargetY = d.y;
-    this.interp.foeHasTarget = true;
-    m.facing = d.f; m.hp = d.hp;
-    if (m.state !== d.st) { m.state = d.st; m.hitApplied = false; }
-    m.stateTime = d.stt;
-    m.frame = d.fr;
-    m.flash = d.fl ? 0.18 : 0;
-    m.cooldown = d.cd;
-    m.defending = d.df;
-    m.vx = d.vx; m.vy = d.vy; // 用于动画/朝向, 但不再直接覆盖位置
-    if (d.jc !== undefined) m.jumpCount = d.jc;
-
-    // 跳跃事件检测: jumpSeq 变化时强制触发跳跃动画(一段/二段跳都触发)
-    // 放在最后, 覆盖前面的 state/stateTime, 保证起跳动画从头播放
-    if (jumpTriggered) {
-      m.jumpSeq = d.js;
-      const isDouble = d.jc !== undefined && d.jc >= 2;
-      m.vy = isDouble ? -8.5 : -7.2;
-      m.onGround = false;
-      m.state = 'jump';
-      m.hitApplied = false;
-      m.stateTime = 0;
-    }
+    this.interp.buffer.push({ t: performance.now() / 1000, d });
+    if (this.interp.buffer.length > 30) this.interp.buffer.shift();
   }
-  // 对手机甲插值: 纯指数 lerp 向 host 最新目标位置收敛
-  // host 30Hz 发状态, 客户端 60Hz 渲染, 中间帧用 lerp 平滑
-  // 注: 曾试过速度外推但弱网下会超前/抖动, 回退到纯 lerp 更稳定
+  // 对手机甲回放: 从渲染延迟缓冲中取「当前渲染时刻」两侧快照插值
+  // - 位置: 在两侧快照间线性插值(平滑)
+  // - 状态/动画: 取自较近一侧快照; 跳跃事件(jumpSeq 递增)在回放时触发一次, 与位移同帧
+  // - 受伤 FX: 与可见血量同步生成
+  // 固定 100ms 渲染延迟是业界标准做法(如 Source/Overwatch), 用恒定延迟换取「动画+位移永远一致」
   _interpFoe(dt) {
-    if (!this.interp.foeHasTarget) return;
-    const foeMech = this.localPlayer === 1 ? this.p2 : this.p1;
-    const tx = this.interp.foeTargetX;
-    const ty = this.interp.foeTargetY;
-    const dx = tx - foeMech.x;
-    const dy = ty - foeMech.y;
+    const buf = this.interp.buffer;
+    if (buf.length === 0) return;
+    const now = performance.now() / 1000;
+    const renderT = now - this.interp.delay;
+    // 丢弃已远超渲染时刻的旧快照(保留至少 2 个用于插值)
+    while (buf.length > 2 && buf[0].t < renderT - 0.05) buf.shift();
+
+    let a = buf[0], b = buf[buf.length - 1];
+    for (let i = 0; i < buf.length - 1; i++) {
+      if (buf[i].t <= renderT && buf[i + 1].t >= renderT) { a = buf[i]; b = buf[i + 1]; break; }
+    }
+    const span = b.t - a.t;
+    const f = span > 0 ? Math.min(1, Math.max(0, (renderT - a.t) / span)) : 0;
+
+    const foe = this.localPlayer === 1 ? this.p2 : this.p1;
+    const tx = a.d.x + (b.d.x - a.d.x) * f;
+    const ty = a.d.y + (b.d.y - a.d.y) * f;
+    const dx = tx - foe.x, dy = ty - foe.y;
     // 偏差过大(被击退/击飞瞬移)直接 snap, 避免 lerp 看起来像慢动作
     if (Math.abs(dx) > 60 || Math.abs(dy) > 60) {
-      foeMech.x = tx; foeMech.y = ty;
+      foe.x = tx; foe.y = ty;
     } else {
-      // 纯指数 lerp: ~70ms 收敛, 稳定不漂移
-      const k = 1 - Math.exp(-dt * 16);
-      foeMech.x += dx * k;
-      foeMech.y += dy * k;
+      const k = 1 - Math.exp(-dt * 18);
+      foe.x += dx * k;
+      foe.y += dy * k;
     }
-    foeMech.onGround = (foeMech.y >= this.groundY);
+
+    // 取较近一侧快照作为离散状态来源
+    const sd = (f >= 0.5) ? b.d : a.d;
+
+    // 跳跃事件: 缓冲回放时检测 jumpSeq 递增, 仅触发一次起跳动画(一段/二段跳都判)
+    if (sd.js !== undefined && sd.js > foe.jumpSeq) {
+      foe.jumpSeq = sd.js;
+      const isDouble = sd.jc !== undefined && sd.jc >= 2;
+      foe.vy = isDouble ? -8.5 : -7.2;
+      foe.onGround = false;
+      if (foe.state !== 'jump') { foe.state = 'jump'; foe.hitApplied = false; }
+      foe.stateTime = 0; // 重置动画, 保证起跳帧可见
+    }
+
+    // 受伤 FX 与可见血量同步(用回放后的 hp 比较)
+    if (this.interp.prevFoeHp !== undefined && this.interp.prevFoeHp - sd.hp >= 4) {
+      const otherX = this.localPlayer === 1 ? this.p1.x : this.p2.x;
+      this._spawnHitFX(foe.x + (otherX > foe.x ? 20 : -20), foe.y - 40, false, (this.interp.prevFoeHp - sd.hp) >= 15);
+    }
+    this.interp.prevFoeHp = sd.hp;
+
+    foe.facing = sd.f;
+    foe.hp = sd.hp;
+    if (foe.state !== sd.st) { foe.state = sd.st; foe.hitApplied = false; }
+    foe.stateTime = sd.stt;
+    foe.frame = sd.fr;
+    foe.flash = sd.fl ? 0.18 : 0;
+    foe.cooldown = sd.cd;
+    foe.defending = sd.df;
+    foe.vx = sd.vx; foe.vy = sd.vy;
+    if (sd.jc !== undefined) foe.jumpCount = sd.jc;
+    foe.onGround = (foe.y >= this.groundY);
   }
   // 检测输入是否变化
   _inputChanged(cur, prev) {
