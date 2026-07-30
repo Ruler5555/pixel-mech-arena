@@ -259,13 +259,48 @@ class Mech {
     }
   }
 
-  draw(ctx) {
-    Sprite.drawMech(ctx, this.x, this.y, this.facing, {
+  draw(ctx, isLocal) {
+    const pose = {
       state: this.state,
       stateTime: this.stateTime,
       frame: this.frame,
       flash: this.flash > 0
-    }, this.pal);
+    };
+    // 己方机甲: 沿像素轮廓描一圈金色线条(离屏剪影 8 方向偏移 1px, 不放大本体)
+    if (isLocal) this._drawGoldOutline(ctx, pose);
+    Sprite.drawMech(ctx, this.x, this.y, this.facing, pose, this.pal);
+  }
+
+  _drawGoldOutline(ctx, pose) {
+    // 离屏画布懒初始化(全体 Mech 共享, 每帧只有己方一台使用)
+    if (!Mech._olA) {
+      Mech._olA = document.createElement('canvas');
+      Mech._olA.width = 200; Mech._olA.height = 200;
+      Mech._olB = document.createElement('canvas');
+      Mech._olB.width = 200; Mech._olB.height = 200;
+    }
+    const A = Mech._olA, B = Mech._olB;
+    const ax = A.getContext('2d'), bx = B.getContext('2d');
+    // 1) 把机甲画进离屏画布 A(脚底锚点定在 100,160)
+    ax.clearRect(0, 0, 200, 200);
+    ax.imageSmoothingEnabled = false;
+    Sprite.drawMech(ax, 100, 160, this.facing, pose, this.pal);
+    // 2) B = A 的金色剪影
+    bx.clearRect(0, 0, 200, 200);
+    bx.globalCompositeOperation = 'source-over';
+    bx.drawImage(A, 0, 0);
+    bx.globalCompositeOperation = 'source-in';
+    bx.fillStyle = '#ffd700';
+    bx.fillRect(0, 0, 200, 200);
+    // 3) 主画布上沿 8 方向各偏移 1px 画剪影 → 形成 1px 金色轮廓(随后本体覆盖中间)
+    const o = 1;
+    const offs = [[-o,0],[o,0],[0,-o],[0,o],[-o,-o],[o,-o],[-o,o],[o,o]];
+    ctx.save();
+    ctx.globalAlpha = 0.9;
+    for (let i = 0; i < offs.length; i++) {
+      ctx.drawImage(B, this.x - 100 + offs[i][0], this.y - 160 + offs[i][1]);
+    }
+    ctx.restore();
   }
 }
 

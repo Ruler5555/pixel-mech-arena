@@ -263,28 +263,24 @@
     }
   }
 
-  // 分享到世界(加入 1 秒冷却, 防止连点重复发送/撤销)
+  // 分享到世界: 点击即分享(重复点击=刷新分享时间), 1 秒后按钮自动恢复默认状态可再次点击
   let shareCooldown = false;
   btnShareWorld.addEventListener('click', () => {
-    if (shareCooldown) return; // 冷却期内直接忽略, 1 秒后才允许再次发送
+    if (shareCooldown) return; // 冷却期内直接忽略
     const code = roomLobbyCode.textContent;
-    if (!sharedToWorld) {
-      World.shareRoom(code, currentPlayer ? currentPlayer.name : '玩家', currentPlayer ? currentPlayer.id : '', Net.getMode() === 'relay' ? '中继' : 'P2P');
-      sharedToWorld = true;
-      btnShareWorld.classList.add('shared');
-      btnShareWorld.textContent = '已分享 ✓';
-      roomLobbyStatus.textContent = '房间已分享到世界频道';
-    } else {
-      World.stopShare(code);
-      sharedToWorld = false;
-      btnShareWorld.classList.remove('shared');
-      btnShareWorld.textContent = '分享到世界';
-      roomLobbyStatus.textContent = '';
-    }
-    // 触发冷却: 禁用 1 秒, 期间不可重复发送
+    World.shareRoom(code, currentPlayer ? currentPlayer.name : '玩家', currentPlayer ? currentPlayer.id : '', Net.getMode() === 'relay' ? '中继' : 'P2P');
+    sharedToWorld = true; // 退出房间时据此 stopShare
+    btnShareWorld.classList.add('shared');
+    btnShareWorld.textContent = '已分享 ✓';
+    roomLobbyStatus.textContent = '房间已分享到世界频道';
     shareCooldown = true;
     btnShareWorld.disabled = true;
-    setTimeout(() => { shareCooldown = false; btnShareWorld.disabled = false; }, 1000);
+    setTimeout(() => {
+      shareCooldown = false;
+      btnShareWorld.disabled = false;
+      btnShareWorld.classList.remove('shared');
+      btnShareWorld.textContent = '分享到世界';
+    }, 1000);
   });
 
   // 房间开始/取消
@@ -323,6 +319,7 @@
   function hideOverlay() { overlay.classList.add('hidden'); }
 
   function backToLobby() {
+    resetRematchState();
     game.stop();
     Net.close();
     hideRoomLobby();
@@ -342,12 +339,74 @@
     roomLobbyStatus.textContent = msg || '';
   }
 
+  // ===== 联机"再来一局": 双方确认 + 超时自动回大厅 =====
+  const REMATCH_TIMEOUT = 15; // 秒
+  let rmLocal = false, rmRemote = false, rmTimer = null, rmDeadline = 0, rmChamp = '';
+  function resetRematchState() {
+    rmLocal = false; rmRemote = false;
+    if (rmTimer) { clearInterval(rmTimer); rmTimer = null; }
+  }
+  function renderRematchOverlay() {
+    const n = (rmLocal ? 1 : 0) + (rmRemote ? 1 : 0);
+    const secs = Math.max(0, Math.ceil((rmDeadline - Date.now()) / 1000));
+    let txt = rmChamp + '\n\n再来一局 ' + n + '/2';
+    if (rmLocal && !rmRemote) txt += '\n已确认, 等待对方...';
+    if (!rmLocal && rmRemote) txt += '\n对方想再来一局!';
+    txt += '\n' + secs + ' 秒后自动返回大厅';
+    showOverlay('比赛结束', txt, rmLocal ? '' : '再来一局');
+  }
+  function startRematchFlow(champ) {
+    // 只重置本地确认与计时; rmRemote 保留(对方的确认可能比本机进入结算画面更早到达)
+    rmLocal = false;
+    if (rmTimer) clearInterval(rmTimer);
+    rmChamp = champ;
+    rmDeadline = Date.now() + REMATCH_TIMEOUT * 1000;
+    renderRematchOverlay();
+    rmTimer = setInterval(() => {
+      if (game.state !== 'matchEnd') { resetRematchState(); return; }
+      if (Date.now() >= rmDeadline) {
+        resetRematchState();
+        Net.sendBye();
+        backToLobby();
+        setStatus('等待超时, 已自动返回大厅');
+        return;
+      }
+      renderRematchOverlay();
+    }, 300);
+  }
+  function rematchVote() {
+    if (rmLocal) return;
+    rmLocal = true;
+    Net.sendRematchReady();
+    renderRematchOverlay();
+    checkRematchGo();
+  }
+  function checkRematchGo() {
+    if (!(rmLocal && rmRemote)) return;
+    resetRematchState();
+    if (game.mode === 'host') {
+      Net.sendReset(); // 通知客户端同步重开
+      game.resetMatch();
+      game.start();
+      hideOverlay();
+    } else {
+      showOverlay('再来一局', '双方已确认\n等待主机开局...', '');
+    }
+  }
+
   // ===== 游戏状态回调 =====
   game.onStateChange = (s) => {
-    if (s === 'ready' || s === 'fight') hideOverlay();
+    if (s === 'ready' || s === 'fight') { hideOverlay(); resetRematchState(); }
     else if (s === 'matchEnd') {
       const champ = game.winsP1 >= 2 ? (hudP1Name.textContent + ' 获胜') : (hudP2Name.textContent + ' 获胜');
-      showOverlay('比赛结束', champ + '\n\n按 R 重开对局\n按 ESC 返回大厅', '再来一局');
+      if (game.mode === 'offline') {
+        // 移动端没有键盘, 不显示 R/ESC 提示
+        const hint = IS_TOUCH_UI ? '' : '\n\n按 R 重开对局\n按 ESC 返回大厅';
+        showOverlay('比赛结束', champ + hint, '再来一局');
+      } else {
+        // 联机: 双方确认后才重开, 超时自动回大厅
+        startRematchFlow(champ);
+      }
     }
   };
 
@@ -361,6 +420,9 @@
         game.resetMatch(); game.start();
         showOverlay('重开对局', '已重新开始', '', { cancelable: true, cancelLabel: '继续' });
         setTimeout(hideOverlay, 1000);
+      } else if (game.state === 'matchEnd') {
+        // 联机结算画面按 R = 投一票"再来一局"(需双方确认)
+        rematchVote();
       } else if (game.mode === 'host') {
         Net.sendReset(); game.resetMatch(); game.start();
         showOverlay('重开对局', '已重新开始\n双方状态已同步', '', { cancelable: true, cancelLabel: '继续' });
@@ -385,6 +447,8 @@
       if (game.onNetEvent) game.onNetEvent('leave');
       return;
     }
+    // 联机模式结算画面: "再来一局"改为双方确认制
+    if (game.state === 'matchEnd' && game.mode !== 'offline') { rematchVote(); return; }
     if (game.state === 'matchEnd' || game.state === 'ready') game.resetMatch();
   };
   startBtn.addEventListener('click', onStart);
@@ -588,10 +652,41 @@
     });
     Net.on('reset', () => {
       if (game.mode === 'client') {
+        resetRematchState();
         game.interp.foeHasTarget = false;
         game.resetMatch(); game.start();
-        showOverlay('刷新对局', '主机已刷新对局\n双方状态已同步', '', { cancelable: true, cancelLabel: '继续' });
-        setTimeout(hideOverlay, 1200);
+        showOverlay('对局开始', '双方状态已同步', '', { cancelable: true, cancelLabel: '继续' });
+        setTimeout(hideOverlay, 1000);
+      }
+    });
+    // 对方点了"再来一局"(双方确认制)
+    Net.on('rematchReady', () => {
+      rmRemote = true;
+      if (game.state === 'matchEnd') {
+        renderRematchOverlay();
+        checkRematchGo();
+      }
+    });
+  }
+
+  // ===== 更新公告: 点击右下角版本号显示近三次更新 =====
+  const CHANGELOG = [
+    ['v51', '联机稳定性大修'],
+    ['v44', '修复幻影伤害'],
+    ['v43', '游客账号固定']
+  ];
+  const versionTag = document.getElementById('versionTag');
+  const changelogPop = document.getElementById('changelogPop');
+  if (versionTag && changelogPop) {
+    changelogPop.innerHTML = '<div class="cl-title">更新公告</div>' +
+      CHANGELOG.map(c => '<div class="cl-item"><span class="cl-ver">' + c[0] + '</span>' + c[1] + '</div>').join('');
+    versionTag.addEventListener('click', (e) => {
+      e.stopPropagation();
+      changelogPop.classList.toggle('hidden');
+    });
+    document.addEventListener('click', (ev) => {
+      if (!changelogPop.classList.contains('hidden') && !changelogPop.contains(ev.target) && ev.target !== versionTag) {
+        changelogPop.classList.add('hidden');
       }
     });
   }

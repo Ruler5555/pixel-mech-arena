@@ -80,6 +80,10 @@ function emptyCtrl() {
 const STATES = { READY:'ready', FIGHT:'fight', ROUND_END:'roundEnd', MATCH_END:'matchEnd' };
 const MODES  = { OFFLINE:'offline', HOST:'host', CLIENT:'client' };
 
+// 触屏设备检测(移动端不显示 R/ESC 等键盘提示)
+const IS_TOUCH_UI = (typeof window !== 'undefined') &&
+  ((window.matchMedia && window.matchMedia('(pointer: coarse)').matches) || 'ontouchstart' in window);
+
 class Game {
   constructor(canvas) {
     this.canvas = canvas;
@@ -150,6 +154,7 @@ class Game {
     this.round = 1;
     this.winsP1 = 0;
     this.winsP2 = 0;
+    this._lastStateFrame = 0; // 新对局重置快照序号(允许主机重启后的小 frame)
     this.startRound();
   }
 
@@ -330,6 +335,13 @@ class Game {
   // ===== 反序列化(客户端应用) =====
   applyRemoteState(s) {
     if (!s) return;
+    // [同步修复] 丢弃过期/重复快照: 双通道或网络抖动下, 旧快照晚到会把画面拉回过去
+    // (机甲回跳/血量倒流)。frame 单调递增, 只接受更新的快照; 差距悬殊视为主机重启, 放行
+    if (s.frame !== undefined) {
+      if (this._lastStateFrame && s.frame <= this._lastStateFrame &&
+          this._lastStateFrame - s.frame < 3600) return;
+      this._lastStateFrame = s.frame;
+    }
     // 客户端检测 hit: hp 下降时本地生成粒子(近似攻击者武器位置)
     const prevHp1 = this.p1.hp, prevHp2 = this.p2.hp;
     // 对手机甲: 仅记录插值目标位置(由 _interpFoe 每帧 lerp 逼近)
@@ -527,8 +539,10 @@ class Game {
 
     Sprite.drawBackground(ctx, this.W, this.H, this.frame);
 
+    // 己方机甲金色描边: offline/host 本地是 P1, client 本地是 P2
+    const localMech = (this.mode === MODES.CLIENT) ? this.p2 : this.p1;
     const list = [this.p1, this.p2].sort((a, b) => a.y - b.y);
-    list.forEach(m => m.draw(ctx));
+    list.forEach(m => m.draw(ctx, m === localMech));
 
     this.particles.forEach(p => p.draw(ctx));
 
@@ -541,10 +555,13 @@ class Game {
     } else if (this.state === STATES.MATCH_END) {
       const champ = this.winsP1 >= 2 ? 'BLUE-01' : 'RED-X';
       this._drawCenterText(champ + '\nCHAMPION!', '#ffcc33', 22);
-      ctx.fillStyle = '#e8e8ff';
-      ctx.font = '8px "Press Start 2P"';
-      ctx.textAlign = 'center';
-      ctx.fillText('按 ESC 离开 / R 重开', this.W / 2, this.H / 2 + 50);
+      // 移动端没有键盘, 不显示 R/ESC 提示
+      if (!IS_TOUCH_UI) {
+        ctx.fillStyle = '#e8e8ff';
+        ctx.font = '8px "Press Start 2P"';
+        ctx.textAlign = 'center';
+        ctx.fillText('按 ESC 离开 / R 重开', this.W / 2, this.H / 2 + 50);
+      }
     }
 
     // 客户端断线/等待提示

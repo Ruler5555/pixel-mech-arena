@@ -31,10 +31,18 @@ const Net = (() => {
   let keepAliveTimer = null;
   let connectDeadline = null;
   let playerName = ''; // 本地玩家名, 连接时发给对方
+  // [同步修复] 双通道去重序号: P2P 与中继同发同一条消息, 慢通道晚到的旧拷贝
+  // 会覆盖新状态(画面回跳)/重复触发攻击(重复出招), 用单调序号 q 丢弃重复与过期包
+  let sendSeq = 0;     // 发送序号
+  let lastRecvSeq = 0; // 已处理的最大对端序号
 
+  // [致命修复] 旧版事件表漏了 reset/resync 键: on('reset')/on('resync') 注册进的是
+  // 临时数组, 回调被静默丢弃 —— 主机重开对局客户端永远收不到、客户端请求刷新主机
+  // 永远收不到, 这是"两端画面各玩各的"的核心根因之一
   const handlers = {
     open: [], connected: [], state: [], input: [], close: [],
-    progress: [], error: [], start: []
+    progress: [], error: [], start: [],
+    reset: [], resync: [], rematchReady: []
   };
   function on(ev, fn) { (handlers[ev] || []).push(fn); }
   function emit(ev, arg) { (handlers[ev] || []).forEach(fn => { try { fn(arg); } catch(e){} }); }
@@ -135,7 +143,9 @@ const Net = (() => {
       peer.on('open', () => {
         progress('信令已就绪,正在连接主机...');
         _startKeepAlive();
-        conn = peer.connect(PEER_PREFIX + code, { reliable: false, serialization: 'json' });
+        // [稳定性修复] reliable:true(有序可靠通道): 旧版不可靠通道会静默丢失 start/reset
+        // 等关键控制消息, 导致"主机点了开始/重开, 客户端没反应"; 状态包小且 30Hz, 可靠通道足够流畅
+        conn = peer.connect(PEER_PREFIX + code, { reliable: true, serialization: 'json' });
         bindConn(conn);
 
         // P2P 建立超时检测
@@ -180,24 +190,45 @@ const Net = (() => {
   }
   function _stopKeepAlive() { clearInterval(keepAliveTimer); keepAliveTimer = null; }
 
+  // 序号判定: 只接受比已见更新的消息; 对端刷新页面后序号会从头开始, 差距悬殊时视为新会话
+  function _acceptSeq(msg) {
+    if (msg.q === undefined) return true; // 兼容无序号的旧客户端
+    if (msg.q > lastRecvSeq) { lastRecvSeq = msg.q; return true; }
+    if (lastRecvSeq - msg.q > 5000) { lastRecvSeq = msg.q; return true; } // 对端重启
+    return false; // 重复/过期拷贝, 丢弃
+  }
+  // 通用消息路由(P2P 与中继共用)
+  function _routeMsg(msg) {
+    if (msg.t === 'state')       emit('state', msg.s);
+    else if (msg.t === 'input')  emit('input', msg.c);
+    else if (msg.t === 'bye')    emit('close');
+    else if (msg.t === 'reset')  emit('reset');
+    else if (msg.t === 'resync') emit('resync');
+    else if (msg.t === 'start')  emit('start');
+    else if (msg.t === 'rmt')    emit('rematchReady');
+  }
+
   function bindConn(c) {
     c.on('open', () => {
       progress('P2P 已建立');
       // 连接建立后发送 hello 带自己的名字
-      try { c.send({ t: 'hello', n: playerName }); } catch(e){}
+      try { c.send({ t: 'hello', n: playerName, q: ++sendSeq }); } catch(e){}
     });
     c.on('data', (msg) => {
       if (!msg || !msg.t) return;
-      if (msg.t === 'state')  emit('state', msg.s);
-      else if (msg.t === 'input') emit('input', msg.c);
-      else if (msg.t === 'hello') emit('connected', { name: msg.n || '' });
-      else if (msg.t === 'bye') emit('close');
-      else if (msg.t === 'reset') emit('reset');
-      else if (msg.t === 'resync') emit('resync');
-      else if (msg.t === 'start') emit('start');
+      if (!_acceptSeq(msg)) return;
+      if (msg.t === 'hello') emit('connected', { name: msg.n || '' });
+      else _routeMsg(msg);
     });
-    c.on('close', () => emit('close'));
-    c.on('error', () => emit('error', new Error('P2P 连接错误')));
+    c.on('close', () => {
+      // [稳定性修复] P2P 通道断开但中继仍在线: 静默切换, 不再弹"重连中"全屏遮罩打断对局
+      if (mqttClient && mqttClient.connected) { progress('P2P 断开, 已自动切至中继通道'); return; }
+      emit('close');
+    });
+    c.on('error', () => {
+      if (mqttClient && mqttClient.connected) { progress('P2P 通道错误, 使用中继通道'); return; }
+      emit('error', new Error('P2P 连接错误'));
+    });
   }
 
   // ============ 中继模式(MQTT over WebSocket) ============
@@ -284,12 +315,11 @@ const Net = (() => {
             progress('已连接主机');
             emit('connected', { name: msg.n || '' });
           }
-        } else if (msg.t === 'state')  emit('state', msg.s);
-        else if (msg.t === 'input') emit('input', msg.c);
-        else if (msg.t === 'bye') emit('close');
-        else if (msg.t === 'reset') emit('reset');
-        else if (msg.t === 'resync') emit('resync');
-        else if (msg.t === 'start') emit('start');
+        } else {
+          // 游戏消息统一走去重(hello/world 握手消息不去重, 允许重发)
+          if (!_acceptSeq(msg)) return;
+          _routeMsg(msg);
+        }
       } catch (e) {}
     });
 
@@ -309,6 +339,7 @@ const Net = (() => {
   function _relaySend(obj) {
     if (!mqttClient || !mqttClient.connected) return;
     obj.r = role;
+    if (obj.q === undefined) obj.q = ++sendSeq; // 直发中继的消息也带序号
     try {
       mqttClient.publish(relayTopic, JSON.stringify(obj), { qos: 0 });
     } catch (e) {}
@@ -338,7 +369,8 @@ const Net = (() => {
 
   // ============ 通用接口 ============
   function send(obj) {
-    // 双通道广播: P2P 与中继只要连上就发(对端只监听其中一个, 不会重复)
+    // 双通道广播: P2P 与中继只要连上就发; 两份拷贝带同一序号 q, 接收端自动丢弃慢的那份
+    obj.q = ++sendSeq;
     if (conn && conn.open) {
       try { conn.send(obj); } catch (e) {}
     }
@@ -352,6 +384,7 @@ const Net = (() => {
   function sendResync() { send({ t: 'resync' }); }
   function sendBye()    { send({ t: 'bye' }); }
   function sendStart() { send({ t: 'start' }); }
+  function sendRematchReady() { send({ t: 'rmt' }); }
 
   function getRole() { return role; }
   function isConnected() {
@@ -372,11 +405,12 @@ const Net = (() => {
     try { if (mqttClient) mqttClient.end(true); } catch(e){}
     mqttClient = null; relayTopic = null;
     role = null; roomCode = null; mode = 'p2p';
+    sendSeq = 0; lastRecvSeq = 0; // 新会话重置去重序号
   }
 
   return {
     on, hostRoom, joinRoom, hostRelay, joinRelay,
-    sendState, sendInput, sendReset, sendResync, sendBye, sendStart,
+    sendState, sendInput, sendReset, sendResync, sendBye, sendStart, sendRematchReady,
     setName, getRole, isConnected, getRoomCode, getMode, close
   };
 })();

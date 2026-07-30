@@ -165,20 +165,60 @@ body {
 }
 .auth-status.ok { color: var(--accent); }
 
-.auth-guest {
+/* 快速登录(主入口): 大而显眼 */
+.auth-quick {
+  width: 100%;
   font-family: inherit;
-  font-size: 8px;
-  letter-spacing: 1px;
-  color: var(--dim);
-  background: transparent;
-  border: 2px solid var(--panel2);
-  border-radius: 8px;
-  padding: 8px 16px;
+  font-size: 12px;
+  letter-spacing: 2px;
+  color: var(--border);
+  background: linear-gradient(180deg, var(--accent) 0%, var(--accent-dk) 100%);
+  border: 3px solid var(--border);
+  border-radius: 14px;
+  padding: 16px;
+  margin-top: 20px;
   cursor: pointer;
-  margin-top: 14px;
-  transition: all 0.15s;
+  box-shadow: 0 5px 0 var(--border), 0 0 18px rgba(95,239,140,0.35);
+  transition: transform 0.08s, box-shadow 0.08s, filter 0.08s;
+  animation: btnGlow 2s ease-in-out infinite;
+  -webkit-tap-highlight-color: transparent;
 }
-.auth-guest:hover { color: var(--text); border-color: var(--dim); }
+.auth-quick:hover { filter: brightness(1.1); }
+.auth-quick:active { transform: translateY(2px); box-shadow: 0 2px 0 var(--border); }
+.auth-quick-tip {
+  font-size: 7px;
+  color: var(--dim);
+  margin-top: 8px;
+  letter-spacing: 1px;
+}
+
+/* 账号登录/注册(次要入口): 折叠收纳 */
+.auth-account { margin-top: 16px; }
+.auth-account summary {
+  font-size: 8px;
+  color: var(--dim);
+  cursor: pointer;
+  letter-spacing: 1px;
+  padding: 6px 0;
+  list-style: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.auth-account summary::-webkit-details-marker { display: none; }
+.auth-account summary::after { content: ' ▾'; }
+.auth-account[open] summary::after { content: ' ▴'; }
+.auth-account summary:hover { color: var(--text); }
+
+/* 简易建议与说明 */
+.auth-note {
+  margin-top: 14px;
+  text-align: left;
+  font-size: 6px;
+  color: var(--dim);
+  line-height: 2;
+  border-top: 2px solid var(--panel2);
+  padding-top: 10px;
+}
 
 /* ===== 玩家信息条 ===== */
 .player-bar {
@@ -233,9 +273,32 @@ body {
   right: 12px;
   font-size: 7px;
   color: var(--dim);
-  opacity: 0.5;
-  pointer-events: none;
+  opacity: 0.6;
+  cursor: pointer;
+  padding: 6px 4px; /* 扩大触控热区 */
+  user-select: none;
+  -webkit-user-select: none;
 }
+.version-tag:hover { color: var(--accent); opacity: 1; }
+
+/* 更新公告弹层(点击版本号显示) */
+.changelog-pop {
+  position: absolute;
+  bottom: 30px;
+  right: 12px;
+  z-index: 60;
+  background: var(--panel);
+  border: 3px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 0 0 2px var(--panel2), 0 6px 16px var(--shadow);
+  padding: 12px 14px;
+  text-align: left;
+  min-width: 180px;
+  animation: fadeIn 0.15s ease-out;
+}
+.cl-title { font-size: 8px; color: var(--accent2); letter-spacing: 1px; margin-bottom: 8px; }
+.cl-item { font-size: 7px; color: var(--text); line-height: 2.2; white-space: nowrap; }
+.cl-ver { color: var(--gold); margin-right: 8px; }
 
 .lobby-content {
   display: flex;

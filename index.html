@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#1a1a2e">
 <meta name="format-detection" content="telephone=no">
 <title>PIXEL MECH ARENA · 像素机甲竞技场</title>
-<link rel="stylesheet" href="css/style.css?v=44">
+<link rel="stylesheet" href="css/style.css?v=51">
 </head>
 <body>
 <div id="app">
@@ -22,31 +22,46 @@
         <h1>PIXEL MECH<span class="hl"> ARENA</span></h1>
         <p class="sub">像素机甲竞技场</p>
       </div>
-      <div id="authForm">
-        <div class="auth-tabs">
-          <button class="auth-tab active" data-tab="login">登录</button>
-          <button class="auth-tab" data-tab="register">注册</button>
+      <!-- 主入口: 快速登录(原游客模式, 本设备固定同一账号) -->
+      <button id="btnGuest" class="auth-quick">⚡ 快速登录</button>
+      <p class="auth-quick-tip">无需注册 · 本设备自动使用同一账号</p>
+
+      <!-- 次要入口: 账号登录/注册(折叠收纳) -->
+      <details class="auth-account">
+        <summary>账号登录 / 注册</summary>
+        <div id="authForm">
+          <div class="auth-tabs">
+            <button class="auth-tab active" data-tab="login">登录</button>
+            <button class="auth-tab" data-tab="register">注册</button>
+          </div>
+          <div id="authLogin" class="auth-panel">
+            <input type="text" id="loginName" class="auth-input" placeholder="用户名" maxlength="12">
+            <input type="password" id="loginPass" class="auth-input" placeholder="密码" maxlength="20">
+            <button id="btnLogin" class="auth-submit">登录</button>
+          </div>
+          <div id="authRegister" class="auth-panel hidden">
+            <input type="text" id="regName" class="auth-input" placeholder="用户名 (3-12字)" maxlength="12">
+            <input type="password" id="regPass" class="auth-input" placeholder="密码 (4-20字)" maxlength="20">
+            <input type="password" id="regPass2" class="auth-input" placeholder="确认密码" maxlength="20">
+            <button id="btnRegister" class="auth-submit">注册</button>
+          </div>
+          <div id="authStatus" class="auth-status"></div>
         </div>
-        <div id="authLogin" class="auth-panel">
-          <input type="text" id="loginName" class="auth-input" placeholder="用户名" maxlength="12">
-          <input type="password" id="loginPass" class="auth-input" placeholder="密码" maxlength="20">
-          <button id="btnLogin" class="auth-submit">登录</button>
-        </div>
-        <div id="authRegister" class="auth-panel hidden">
-          <input type="text" id="regName" class="auth-input" placeholder="用户名 (3-12字)" maxlength="12">
-          <input type="password" id="regPass" class="auth-input" placeholder="密码 (4-20字)" maxlength="20">
-          <input type="password" id="regPass2" class="auth-input" placeholder="确认密码" maxlength="20">
-          <button id="btnRegister" class="auth-submit">注册</button>
-        </div>
-        <div id="authStatus" class="auth-status"></div>
+      </details>
+
+      <!-- 简易建议与说明 -->
+      <div class="auth-note">
+        <p>· 推荐用「快速登录」, 一键进入大厅开打</p>
+        <p>· 账号数据仅保存在当前浏览器, 换设备/换浏览器不通用</p>
+        <p>· 密码忘记无法找回, 昵称党建议直接快速登录</p>
       </div>
-      <button id="btnGuest" class="auth-guest">游客模式</button>
     </div>
   </div>
 
   <!-- ===== 主菜单/大厅 ===== -->
   <div id="lobby" class="hidden">
-    <span class="version-tag">v44</span>
+    <span class="version-tag" id="versionTag">v51</span>
+    <div id="changelogPop" class="changelog-pop hidden"></div>
 
     <!-- 玩家信息条 -->
     <div class="player-bar">
@@ -201,16 +216,16 @@
   </div>
 </div>
 
-<script src="vendor/peerjs.min.js?v=44"></script>
-<script src="vendor/mqtt.min.js?v=44"></script>
-<script src="js/auth.js?v=44"></script>
-<script src="js/world.js?v=44"></script>
-<script src="js/input.js?v=44"></script>
-<script src="js/touch.js?v=44"></script>
-<script src="js/sprite.js?v=44"></script>
-<script src="js/player.js?v=44"></script>
-<script src="js/net.js?v=44"></script>
-<script src="js/game.js?v=44"></script>
-<script src="js/main.js?v=44"></script>
+<script src="vendor/peerjs.min.js?v=51"></script>
+<script src="vendor/mqtt.min.js?v=51"></script>
+<script src="js/auth.js?v=51"></script>
+<script src="js/world.js?v=51"></script>
+<script src="js/input.js?v=51"></script>
+<script src="js/touch.js?v=51"></script>
+<script src="js/sprite.js?v=51"></script>
+<script src="js/player.js?v=51"></script>
+<script src="js/net.js?v=51"></script>
+<script src="js/game.js?v=51"></script>
+<script src="js/main.js?v=51"></script>
 </body>
 </html>
