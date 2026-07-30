@@ -430,8 +430,13 @@ class Game {
   // - 位置: 在两侧快照间线性插值(平滑)
   // - 状态/动画: 取自较近一侧快照; 跳跃事件(jumpSeq 递增)在回放时触发一次, 与位移同帧
   // - 受伤 FX: 与可见血量同步生成
-  // 固定 100ms 渲染延迟是业界标准做法(如 Source/Overwatch), 用恒定延迟换取「动画+位移永远一致」
+  // 渲染延迟缓冲是业界标准做法(如 Source/Overwatch), 用「恒定延迟」换取「动画+位移永远一致」;
+  // 本作改为按真实 RTT 自适应: 低延迟本地对战缓冲仅 40ms, 高延迟走中继时才放大到 100ms 保同步
   _interpFoe(dt) {
+    // 自适应渲染延迟: 按真实 RTT 动态调节缓冲大小(北京本地/同 WiFi 对战 RTT 仅 10~30ms,
+    // 硬撑 100ms 缓冲是纯加难受; 高延迟(走中继)时才放大缓冲保「动画+位移永远一致」)
+    const rttMs = (typeof Net !== 'undefined' && Net.getRtt) ? Net.getRtt() : 0;
+    this.interp.delay = rttMs <= 0 ? 0.07 : Math.max(0.04, Math.min(0.10, (rttMs / 1000) * 1.6));
     const buf = this.interp.buffer;
     if (buf.length === 0) return;
     const now = performance.now() / 1000;
