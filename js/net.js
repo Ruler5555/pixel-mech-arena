@@ -468,6 +468,6 @@ const Net = (() => {
   return {
     on, hostRoom, joinRoom, hostRelay, joinRelay,
     sendState, sendInput, sendReset, sendResync, sendBye, sendStart, sendRematchReady,
-    setName, getRole, isConnected, getRoomCode, getMode, close
+    setName, getRole, isConnected, getRoomCode, getMode, getRtt, close
   };
 })();
