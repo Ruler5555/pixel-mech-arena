@@ -1030,6 +1030,11 @@ html, body {
   .round-num { font-size: 18px; }
   #hud { padding: 8px 10px; gap: 8px; }
   .hub-btn .hb-txt { font-size: 16px; }
+  /* 移动端联机大厅: 输入框+加入键改成纵向堆叠, 避免 flex:1 的输入框把按钮挤到只剩一半宽度 */
+  .lobby-join { flex-direction: column; gap: 10px; }
+  .lobby-join .lobby-input { width: 100%; }
+  .lobby-join .lobby-btn { width: 100%; }
+  .lobby-input { letter-spacing: 2px; } /* 4px 字间距对中文过宽, 收到 2px */
 }
 
 /* 防止 iOS 长按选中、橡皮筋滚动 */
