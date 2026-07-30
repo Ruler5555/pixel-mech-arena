@@ -45,6 +45,8 @@
   const gameWrap = document.getElementById('gameWrap');
   const elHpP1 = document.getElementById('hpP1');
   const elHpP2 = document.getElementById('hpP2');
+  const elHpNumP1 = document.getElementById('hpNumP1');
+  const elHpNumP2 = document.getElementById('hpNumP2');
   const elWinsP1 = document.getElementById('winsP1');
   const elWinsP2 = document.getElementById('winsP2');
   const elRound = document.getElementById('roundNum');
@@ -71,11 +73,24 @@
   function fmtWins(w) {
     return '<span class="' + (w > 0 ? 'got' : '') + '">●</span> <span class="' + (w > 1 ? 'got' : '') + '">●</span>';
   }
+  // 血量数字变动微小动画: 重启动画需先移除 class 并强制重排
+  function pulseHp(el) {
+    if (!el) return;
+    el.classList.remove('hp-pulse');
+    void el.offsetWidth;
+    el.classList.add('hp-pulse');
+  }
+  let prevHpNum1 = -1, prevHpNum2 = -1;
 
   function updateHUD() {
     if (!game.p1 || !game.p2) return; // [BUG-FIX] 比赛开始前 p1/p2 为 null, 跳过避免每帧 TypeError
     elHpP1.style.width = pct(game.p1.hp);
     elHpP2.style.width = pct(game.p2.hp);
+    // 血条下方 HP 数字: 四舍五入只保留整数(内部 HP 可为小数, 受击时显示整数)
+    const hpNum1 = Math.round(game.p1.hp);
+    const hpNum2 = Math.round(game.p2.hp);
+    if (elHpNumP1) { elHpNumP1.textContent = hpNum1; if (hpNum1 !== prevHpNum1) { pulseHp(elHpNumP1); prevHpNum1 = hpNum1; } }
+    if (elHpNumP2) { elHpNumP2.textContent = hpNum2; if (hpNum2 !== prevHpNum2) { pulseHp(elHpNumP2); prevHpNum2 = hpNum2; } }
     elWinsP1.innerHTML = fmtWins(game.winsP1);
     elWinsP2.innerHTML = fmtWins(game.winsP2);
     elRound.textContent = game.round;
@@ -674,6 +689,12 @@
 
   // ===== 更新公告: 点击版本号显示近三次更新(倒序: 最新在前; 每条用短句概括改动, 一点一换行; 每次发版须 prepend 一条真实版本) =====
   const CHANGELOG = [
+    ['v68', [
+      '重击伤害提升至18',
+      '防御减伤80%反伤50%',
+      '同受伤多者判负',
+      '血条下显血量数字'
+    ]],
     ['v64', [
       '分享键文案修正',
       '快速登录真居中'
@@ -682,11 +703,6 @@
       '版本规则回退按条数',
       '快速登录居中已修',
       '对战平衡性优化'
-    ]],
-    ['v59', [
-      '快速登录文字居中',
-      '大厅建房按钮加粗',
-      '公告改内容概括'
     ]]
   ];
   const versionTag = document.getElementById('versionTag');

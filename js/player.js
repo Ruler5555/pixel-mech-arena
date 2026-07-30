@@ -22,6 +22,7 @@ class Mech {
 
     this.maxHP = 100;
     this.hp = 100;
+    this.dmgTaken = 0; // 本回合累计受伤(用于回合结束平局判定: 受伤多者负)
 
     // 物理
     this.vx = 0;
@@ -71,7 +72,7 @@ class Mech {
     if (type === 'L') {
       this.atk = { type, duration: 0.34, activeStart: 0.08, activeEnd: 0.18, dmg: 8,  reach: 50, height: 50, cd: 0.14 };
     } else {
-      this.atk = { type, duration: 0.86, activeStart: 0.26, activeEnd: 0.40, dmg: 14, reach: 64, height: 60, cd: 0.40 };
+      this.atk = { type, duration: 0.86, activeStart: 0.26, activeEnd: 0.40, dmg: 18, reach: 64, height: 60, cd: 0.40 };
     }
     this.setState('atk' + type);
     this._hitDone = false; // 每次新攻击重新武装, 保证"一次攻击只命中一次"
@@ -83,14 +84,16 @@ class Mech {
     if (this.state === 'ko') return 0;
     // 防御减伤
     if (this.defending && this.state === 'defend') {
-      const reduced = Math.round(dmg * 0.5);
-      this.hp = Math.max(0, this.hp - reduced);
+      const taken = dmg * 0.2; // 盾牌减伤 80%, 仅承受 20%(内部保留小数, 显示时四舍五入)
+      this.hp = Math.max(0, this.hp - taken);
+      this.dmgTaken += taken;
       this.flash = 0.12;
       // 防御时仍受小幅击退但不进入 hurt
       this.vx += (this.x >= fromX ? 1 : -1) * 0.6;
-      return -reduced; // 负值表示被防御
+      return -taken; // 负值表示被防御
     }
     this.hp = Math.max(0, this.hp - dmg);
+    this.dmgTaken += dmg;
     this.flash = 0.18;
     // 击退
     this.vx += (this.x >= fromX ? 1 : -1) * 2.2;

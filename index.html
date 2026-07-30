@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#1a1a2e">
 <meta name="format-detection" content="telephone=no">
 <title>PIXEL MECH ARENA · 像素机甲竞技场</title>
-<link rel="stylesheet" href="css/style.css?v=64">
+<link rel="stylesheet" href="css/style.css?v=68">
 </head>
 <body>
 <div id="app">
@@ -56,13 +56,13 @@
         <p>· 密码忘记无法找回, 昵称党建议直接快速登录</p>
       </div>
     </div>
-    <span class="version-tag" id="versionTag">v64</span>
+    <span class="version-tag" id="versionTag">v68</span>
     <div id="changelogPop" class="changelog-pop hidden"></div>
   </div>
 
   <!-- ===== 主菜单/大厅 ===== -->
   <div id="lobby" class="hidden">
-    <span class="version-tag lobby-version" id="lobbyVersion">v64</span>
+    <span class="version-tag lobby-version" id="lobbyVersion">v68</span>
 
     <!-- 玩家信息条 -->
     <div class="player-bar">
@@ -100,12 +100,14 @@
           </details>
           <details class="lobby-help">
             <summary>游戏规则</summary>
-            <p>· 先胜 2 局者赢得整场对决</p>
-            <p>· 60 秒倒计时,时间到血量高者胜</p>
-            <p>· 轻击快但伤害低,重击慢但伤害高</p>
-            <p>· 防御可减伤 60%,但无法移动</p>
-            <p>· 键盘: A/D 左右 W 跳 J 轻击 K 重击 L 防御</p>
-            <p>· 移动端: 左下方向 右下按键</p>
+            <p>· 三局两胜(BO3),每回合 60 秒,时间到比血量,高者胜</p>
+            <p>· 血量上限 100,显示在各自血条下方,受击后实时更新</p>
+            <p>· 轻击:伤害 8,出手快后摇短;重击:伤害 18,出手慢,破防惩罚强</p>
+            <p>· 防御:减伤 80% 并反弹 50% 伤害给攻击者,但防御时不能移动</p>
+            <p>· 双方同时受击(如盾反)且时间到血量相同,受伤多的一方判负</p>
+            <p>· 二段跳可空中走位,但空中不能攻击</p>
+            <p>· 键盘: A/D 移动 · W 跳 · J 轻击 · K 重击 · L 防御</p>
+            <p>· 移动端: 左下方向滑杆,右下 轻击/重击/防御/跳跃</p>
           </details>
         </div>
       </div>
@@ -159,6 +161,7 @@
       <div class="player-hud left">
         <div class="name"><span id="hudP1Name">BLUE-01</span> <span class="role" id="roleP1">玩家</span></div>
         <div class="hp-bar"><div class="hp-fill blue" id="hpP1"></div></div>
+        <div class="hp-num" id="hpNumP1">100</div>
         <div class="wins" id="winsP1">○ ○</div>
       </div>
       <div class="round-info">
@@ -170,6 +173,7 @@
       <div class="player-hud right">
         <div class="name"><span class="role" id="roleP2">AI</span> <span id="hudP2Name">RED-X</span></div>
         <div class="hp-bar"><div class="hp-fill red" id="hpP2"></div></div>
+        <div class="hp-num" id="hpNumP2">100</div>
         <div class="wins" id="winsP2">○ ○</div>
       </div>
     </div>
@@ -217,16 +221,16 @@
   </div>
 </div>
 
-<script src="vendor/peerjs.min.js?v=64"></script>
-<script src="vendor/mqtt.min.js?v=64"></script>
-<script src="js/auth.js?v=64"></script>
-<script src="js/world.js?v=64"></script>
-<script src="js/input.js?v=64"></script>
-<script src="js/touch.js?v=64"></script>
-<script src="js/sprite.js?v=64"></script>
-<script src="js/player.js?v=64"></script>
-<script src="js/net.js?v=64"></script>
-<script src="js/game.js?v=64"></script>
-<script src="js/main.js?v=64"></script>
+<script src="vendor/peerjs.min.js?v=68"></script>
+<script src="vendor/mqtt.min.js?v=68"></script>
+<script src="js/auth.js?v=68"></script>
+<script src="js/world.js?v=68"></script>
+<script src="js/input.js?v=68"></script>
+<script src="js/touch.js?v=68"></script>
+<script src="js/sprite.js?v=68"></script>
+<script src="js/player.js?v=68"></script>
+<script src="js/net.js?v=68"></script>
+<script src="js/game.js?v=68"></script>
+<script src="js/main.js?v=68"></script>
 </body>
 </html>

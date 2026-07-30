@@ -702,6 +702,23 @@ body {
 .wins { font-size: 10px; color: var(--dim); letter-spacing: 4px; }
 .wins .got { color: var(--gold); text-shadow: 0 0 6px rgba(255,215,0,0.5); }
 
+/* 血条下方 HP 数字: 受击变动微小动画 */
+.hp-num {
+  font-size: 9px;
+  color: var(--text);
+  letter-spacing: 1px;
+  font-family: "Press Start 2P", monospace;
+  min-width: 28px;
+  text-align: center;
+  transform-origin: center;
+}
+.hp-num.hp-pulse { animation: hpPulse 0.34s ease-out; }
+@keyframes hpPulse {
+  0%   { transform: scale(1.55); color: #ff5a6a; text-shadow: 0 0 6px rgba(255,90,106,0.85); }
+  55%  { transform: scale(1.15); color: #ffcc33; text-shadow: 0 0 4px rgba(255,204,51,0.6); }
+  100% { transform: scale(1); color: var(--text); text-shadow: none; }
+}
+
 .round-info { text-align: center; }
 .round-label { font-size: 7px; color: var(--dim); }
 .round-num {
