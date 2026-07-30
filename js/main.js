@@ -255,8 +255,10 @@
     }
   }
 
-  // 分享到世界
+  // 分享到世界(加入 1 秒冷却, 防止连点重复发送/撤销)
+  let shareCooldown = false;
   btnShareWorld.addEventListener('click', () => {
+    if (shareCooldown) return; // 冷却期内直接忽略, 1 秒后才允许再次发送
     const code = roomLobbyCode.textContent;
     if (!sharedToWorld) {
       World.shareRoom(code, currentPlayer ? currentPlayer.name : '玩家', currentPlayer ? currentPlayer.id : '', Net.getMode() === 'relay' ? '中继' : 'P2P');
@@ -271,6 +273,10 @@
       btnShareWorld.textContent = '分享到世界';
       roomLobbyStatus.textContent = '';
     }
+    // 触发冷却: 禁用 1 秒, 期间不可重复发送
+    shareCooldown = true;
+    btnShareWorld.disabled = true;
+    setTimeout(() => { shareCooldown = false; btnShareWorld.disabled = false; }, 1000);
   });
 
   // 房间开始/取消
@@ -283,6 +289,9 @@
   btnRoomCancel.addEventListener('click', () => {
     hideRoomLobby();
     Net.close();
+    // 关键修复: 返回大厅时必须解除创建/加入按钮的禁用, 否则 btnHost 会一直被锁死(创建房间后无法再次创建)
+    btnHost.disabled = false;
+    btnJoin.disabled = false;
     showLobby();
     setStatus('');
   });
