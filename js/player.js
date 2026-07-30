@@ -106,8 +106,10 @@ class Mech {
   }
 
   // 判定当前攻击是否处于"可命中"窗口
+  // 必须同时满足: 有攻击数据 + 当前确实处于对应攻击状态(防止状态被打断后残留 atk 产生幻影命中盒)
   attackActive() {
     if (!this.atk) return false;
+    if (this.state !== 'atk' + this.atk.type) return false;
     const t = this.stateTime;
     return t >= this.atk.activeStart && t <= this.atk.activeEnd;
   }
@@ -137,14 +139,18 @@ class Mech {
 
     const dead = this.state === 'ko';
     const hurt = this.state === 'hurt';
-    const attacking = this.state === 'atkL' || this.state === 'atkH';
+    let attacking = this.state === 'atkL' || this.state === 'atkH';
 
     // ---- 输入 ----
     this.defending = false;
     if (!dead && !hurt) {
       // 攻击触发
-      if (ctrl.tapL && this.onGround && !attacking) this.startAttack('L');
-      else if (ctrl.tapH && this.onGround && !attacking) this.startAttack('H');
+      // 关键: startAttack 成功后必须刷新 attacking, 否则本帧后续的
+      // "状态切换"仍按旧值 false 把状态改回 idle/walk, 留下永不清除的
+      // 孤儿 this.atk —— 之后每次状态切换 stateTime 归零都会重新穿过
+      // 命中窗口, 造成"点过一次攻击后靠近就自动出伤害"的幻影伤害 bug
+      if (ctrl.tapL && this.onGround && !attacking) { if (this.startAttack('L')) attacking = true; }
+      else if (ctrl.tapH && this.onGround && !attacking) { if (this.startAttack('H')) attacking = true; }
 
       // 防御(按住) — 攻击中不能切防御
       if (ctrl.defend && !attacking && this.onGround) {
@@ -206,6 +212,12 @@ class Mech {
       this.atk = null;
       this._hitDone = false;
       this.setState(this.onGround ? 'idle' : 'jump');
+    }
+    // 兜底: 状态已不是攻击态却残留 atk 数据(被 hurt/ko/任何打断), 立即清除
+    // 防止孤儿 atk 在之后的状态切换中重新产生命中盒
+    if (!attacking && this.atk && this.state !== 'atkL' && this.state !== 'atkH') {
+      this.atk = null;
+      this._hitDone = false;
     }
     if (hurt && this.stateTime >= 0.3) {
       this.setState(this.onGround ? 'idle' : 'jump');
