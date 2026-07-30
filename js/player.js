@@ -74,6 +74,7 @@ class Mech {
       this.atk = { type, duration: 1.00, activeStart: 0.30, activeEnd: 0.42, dmg: 14, reach: 64, height: 60, cd: 0.60 };
     }
     this.setState('atk' + type);
+    this._hitDone = false; // 每次新攻击重新武装, 保证"一次攻击只命中一次"
     this.cooldown = this.atk.duration + this.atk.cd;
     return true;
   }
@@ -203,6 +204,7 @@ class Mech {
     // ---- 攻击状态结束 ----
     if (attacking && this.atk && this.stateTime >= this.atk.duration) {
       this.atk = null;
+      this._hitDone = false;
       this.setState(this.onGround ? 'idle' : 'jump');
     }
     if (hurt && this.stateTime >= 0.3) {

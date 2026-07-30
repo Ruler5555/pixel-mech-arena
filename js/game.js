@@ -253,6 +253,9 @@ class Game {
       this.p1.update(dt, c1, this.p2, this);
       this.p2.update(dt, c2, this.p1, this);
 
+      // 消费 client 边沿输入: 每帧至多触发一次攻击/跳跃, 杜绝"边沿卡住"导致的靠近自动出伤害
+      if (this.remoteCtrl) { this.remoteCtrl.tapL = false; this.remoteCtrl.tapH = false; this.remoteCtrl.tapJump = false; }
+
       this._resolveCombat(this.p1, this.p2);
       this._resolveCombat(this.p2, this.p1);
 
@@ -460,7 +463,17 @@ class Game {
   }
 
   // host 收到 client input
-  applyRemoteInput(c) { this.remoteCtrl = c || emptyCtrl(); }
+  // 边沿动作(tapL/tapH/tapJump)用 OR 累加, 避免两帧之间到达的"点击"被覆盖丢失;
+  // 持续动作(left/right/jump/defend)取最新值。host 每帧消费后清零(见 update 战斗分支)
+  applyRemoteInput(c) {
+    if (!c) { this.remoteCtrl = emptyCtrl(); return; }
+    if (!this.remoteCtrl) this.remoteCtrl = emptyCtrl();
+    const r = this.remoteCtrl;
+    r.tapL    = !!(r.tapL    || c.tapL);
+    r.tapH    = !!(r.tapH    || c.tapH);
+    r.tapJump = !!(r.tapJump || c.tapJump);
+    r.left = !!c.left; r.right = !!c.right; r.jump = !!c.jump; r.defend = !!c.defend;
+  }
 
   // 客户端检测到 hit 事件(由 host 发的 state 中 hp 下降推算),本地生成粒子
   _clientDetectHit(prevP1, prevP2) {

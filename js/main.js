@@ -174,9 +174,17 @@
   });
   regPass2.addEventListener('keydown', (e) => { if (e.key === 'Enter') btnRegister.click(); });
 
+  // 游客模式: 同一设备(同一浏览器)固定一个游客账号, 不每次随机
+  const KEY_GUEST_ID = 'pma_guest_id';
   btnGuest.addEventListener('click', () => {
     isGuest = true;
-    currentPlayer = { id: 'GUEST-' + Math.random().toString(36).slice(2, 8).toUpperCase(), name: '游客' };
+    let gid = null;
+    try { gid = localStorage.getItem(KEY_GUEST_ID); } catch (e) {}
+    if (!gid) {
+      gid = 'GUEST-' + Math.random().toString(36).slice(2, 8).toUpperCase();
+      try { localStorage.setItem(KEY_GUEST_ID, gid); } catch (e) {}
+    }
+    currentPlayer = { id: gid, name: '游客' };
     showLobby();
   });
 
