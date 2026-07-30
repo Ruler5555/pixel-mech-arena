@@ -52,6 +52,7 @@
   const elRound = document.getElementById('roundNum');
   const elTimer = document.getElementById('timer');
   const elNet = document.getElementById('netStatus');
+  const rttTag = document.getElementById('rttTag');
   const roleP1 = document.getElementById('roleP1');
   const roleP2 = document.getElementById('roleP2');
   const hudP1Name = document.getElementById('hudP1Name');
@@ -110,6 +111,20 @@
     } else if (game.mode === 'client') {
       const m = Net.getMode() === 'relay' ? '中继' : 'P2P';
       modeTag.textContent = Net.isConnected() ? '客户端 · ' + m : '客户端 · 重连中';
+    }
+    // 实时 RTT 显示: 仅在联机模式显示, 离线隐藏; 按延迟高低变色(绿<80 / 黄<150 / 红)
+    if (game.mode === 'offline') {
+      rttTag.style.display = 'none';
+    } else {
+      rttTag.style.display = '';
+      const r = Net.getRtt();
+      if (r > 0) {
+        rttTag.textContent = r + 'ms';
+        rttTag.className = 'rtt-tag ' + (r < 80 ? 'good' : r < 150 ? 'ok' : 'bad');
+      } else {
+        rttTag.textContent = '…';
+        rttTag.className = 'rtt-tag';
+      }
     }
     resyncBtn.classList.toggle('visible', game.mode !== 'offline');
   }
@@ -689,6 +704,11 @@
 
   // ===== 更新公告: 点击版本号显示近三次更新(倒序: 最新在前; 每条用短句概括改动, 一点一换行; 每次发版须 prepend 一条真实版本) =====
   const CHANGELOG = [
+    ['v75', [
+      'RTT延迟实时显示',
+      'TURN配置+自托管',
+      'STUN穿透增强'
+    ]],
     ['v72', [
       '对手渲染延迟缓冲',
       '跳跃动画同步',
@@ -696,12 +716,6 @@
     ]],
     ['v69', [
       '血条数字左贴边对齐'
-    ]],
-    ['v68', [
-      '重击伤害提升至18',
-      '防御减伤80%反伤50%',
-      '同受伤多者判负',
-      '血条下显血量数字'
     ]]
   ];
   const versionTag = document.getElementById('versionTag');

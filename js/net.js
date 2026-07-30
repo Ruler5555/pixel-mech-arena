@@ -5,6 +5,14 @@
 //   3. 连接超时检测 + 详细错误类型回调
 //   4. 提供 relay 模式(ntfy.sh 免费 pub/sub),P2P 失败时备选
 
+// TURN 配置槽: 用于"对称 NAT"兜底——无 TURN 时这类网络会退回公共 broker 中继(200ms+ 高延迟)
+// 根治方案: 部署自托管 coturn(见仓库 deploy/turn/ 目录的 docker-compose 与说明),
+//   启动后把下面的 TURN 凭据填进来即生效, 无需改其它代码
+const TURN_SERVERS = [
+  // 自托管 TURN 填这里(示例, 生产必填):
+  // { urls: 'turn:turn.your-domain.com:3478?transport=tcp', username: 'pma', credential: 'YOUR_SECRET' },
+  // { urls: 'turn:turn.your-domain.com:3478?transport=udp', username: 'pma', credential: 'YOUR_SECRET' }
+];
 const ICE_SERVERS = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
@@ -14,7 +22,8 @@ const ICE_SERVERS = {
     { urls: 'stun:stun4.l.google.com:19302' },
     { urls: 'stun:global.stun.twilio.com:3478' },
     { urls: 'stun:stun.qq.com:3478' },
-    { urls: 'stun:stun.miwifi.com:3478' }
+    { urls: 'stun:stun.miwifi.com:3478' },
+    ...TURN_SERVERS
   ],
   // 提高穿透概率
   iceTransportPolicy: 'all'
@@ -36,6 +45,8 @@ const Net = (() => {
   let sendSeq = 0;     // 发送序号
   let lastRecvSeq = 0; // 已处理的最大对端序号
   let lastP2pRecv = 0; // 最近一次收到 P2P 包的时间(ms), 用于判断 P2P 是否停滞
+  let rtt = 0;          // 最近一次往返时延(ms), 由 ping/pong 测量
+  let pingTimer = null; // 周期性 ping 定时器
 
   // [致命修复] 旧版事件表漏了 reset/resync 键: on('reset')/on('resync') 注册进的是
   // 临时数组, 回调被静默丢弃 —— 主机重开对局客户端永远收不到、客户端请求刷新主机
@@ -198,6 +209,13 @@ const Net = (() => {
   }
   function _stopKeepAlive() { clearInterval(keepAliveTimer); keepAliveTimer = null; }
 
+  // 实时 RTT/ping 测量: 每秒发一次 ping, 对方回 pong, 用时间戳差算往返时延
+  // 走 send() 现有路由(P2P 优先/中继兜底), 故测到的是当前实际活跃通道的延迟
+  function _sendPing() { if (isConnected()) send({ t: 'ping', ts: Date.now() }); }
+  function _startPingMonitor() { clearInterval(pingTimer); pingTimer = setInterval(_sendPing, 1000); }
+  function _stopPingMonitor() { clearInterval(pingTimer); pingTimer = null; }
+  function getRtt() { return rtt; }
+
   // 序号判定: 只接受比已见更新的消息; 对端刷新页面后序号会从头开始, 差距悬殊时视为新会话
   function _acceptSeq(msg) {
     if (msg.q === undefined) return true; // 兼容无序号的旧客户端
@@ -214,11 +232,14 @@ const Net = (() => {
     else if (msg.t === 'resync') emit('resync');
     else if (msg.t === 'start')  emit('start');
     else if (msg.t === 'rmt')    emit('rematchReady');
+    else if (msg.t === 'ping')  { send({ t: 'pong', ts: msg.ts }); } // 收到 ping 立即回 pong
+    else if (msg.t === 'pong')  { const r = Date.now() - (msg.ts || 0); if (r >= 0 && r < 10000) rtt = r; } // 计算 RTT
   }
 
   function bindConn(c) {
     c.on('open', () => {
       progress('P2P 已建立');
+      _startPingMonitor(); // 连接就绪后启动 RTT 测量
       // 连接建立后发送 hello 带自己的名字
       try { c.send({ t: 'hello', n: playerName, q: ++sendSeq }); } catch(e){}
     });
@@ -282,6 +303,7 @@ const Net = (() => {
         resolved = true;
         progress('中继已连接,等待对手...');
         mqttClient.subscribe(relayTopic, { qos: 0 });
+        _startPingMonitor(); // 中继就绪后也启动 RTT 测量
         resolve(code); // 连上 broker 即 resolve,不等对手
         // client 主动发 hello 带名字, 并重发直到收到 world
         if (role === 'client') {
@@ -425,7 +447,8 @@ const Net = (() => {
     try { if (mqttClient) mqttClient.end(true); } catch(e){}
     mqttClient = null; relayTopic = null;
     role = null; roomCode = null; mode = 'p2p';
-    sendSeq = 0; lastRecvSeq = 0; lastP2pRecv = 0; // 新会话重置去重/路由状态
+    sendSeq = 0; lastRecvSeq = 0; lastP2pRecv = 0; rtt = 0; // 新会话重置去重/路由状态
+    _stopPingMonitor();
   }
 
   return {
