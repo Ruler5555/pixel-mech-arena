@@ -62,7 +62,6 @@
   const ovText = document.getElementById('overlayText');
   const startBtn = document.getElementById('startBtn');
   const cancelBtn = document.getElementById('cancelBtn');
-  const resyncBtn = document.getElementById('resyncBtn');
   const modeTag = document.getElementById('gameModeTag');
 
   let exitConfirmMode = false;
@@ -126,7 +125,6 @@
         rttTag.className = 'rtt-tag';
       }
     }
-    resyncBtn.classList.toggle('visible', game.mode !== 'offline');
   }
 
   // ===== 登录界面逻辑 =====
@@ -461,7 +459,7 @@
         showOverlay('重开对局', '已重新开始\n双方状态已同步', '', { cancelable: true, cancelLabel: '继续' });
         setTimeout(hideOverlay, 1200);
       } else if (game.mode === 'client') {
-        Net.sendResync();
+        Net.sendReset();
         showOverlay('重开对局', '已请求主机重开\n等待响应...', '', { cancelable: true, cancelLabel: '继续' });
         setTimeout(() => { if (!overlay.classList.contains('hidden')) hideOverlay(); }, 3000);
       }
@@ -503,28 +501,6 @@
     exitMobileBtn.addEventListener('click', onExit);
     exitMobileBtn.addEventListener('pointerdown', onExit);
   }
-
-  // 刷新对局: 单方面刷新(仅刷新本机视图/要求对手推送最新快照, 绝不重置对局)
-  const onResync = (e) => {
-    e.preventDefault();
-    if (_btnHandled) return;
-    _btnHandled = true;
-    setTimeout(() => { _btnHandled = false; }, 400);
-    if (game.mode === 'host') {
-      // 主机点刷新: 立即向对手(客户端)推送最新权威快照; 本机对局继续, 不重置
-      Net.sendState(game._serializeState());
-      showOverlay('刷新', '已向对手推送最新状态\n(本机对局未重置)', '', { cancelable: true, cancelLabel: '继续' });
-      setTimeout(hideOverlay, 1200);
-    } else if (game.mode === 'client') {
-      // 客户端点刷新: 清空本地插值缓冲, 请求主机推送最新快照; 仅本机视图刷新, 不影响对手
-      if (game.interp) game.interp.foeHasTarget = false;
-      Net.sendResync();
-      showOverlay('刷新', '已请求主机推送最新状态\n正在重新同步(仅本机视图)', '', { cancelable: true, cancelLabel: '继续' });
-      setTimeout(() => { if (!overlay.classList.contains('hidden')) hideOverlay(); }, 3000);
-    }
-  };
-  resyncBtn.addEventListener('click', onResync);
-  resyncBtn.addEventListener('pointerdown', onResync);
 
   // ===== 大厅按钮 =====
   btnOffline.addEventListener('click', () => {
@@ -679,14 +655,7 @@
       }, 6000);
     });
     Net.on('error', () => { setStatus('网络错误,请重试', true); });
-    Net.on('resync', () => {
-      // 对手请求刷新: 仅向对手推送最新权威快照, 不重置本机对局(单方面刷新)
-      if (game.mode === 'host' && Net.isConnected()) {
-        Net.sendState(game._serializeState());
-        showOverlay('刷新', '对手请求刷新\n已向其推送最新状态(本机未重置)', '', { cancelable: true, cancelLabel: '继续' });
-        setTimeout(hideOverlay, 1200);
-      }
-    });
+
     Net.on('reset', () => {
       if (game.mode === 'client') {
         resetRematchState();
@@ -708,6 +677,9 @@
 
   // ===== 更新公告: 点击版本号显示近三次更新(倒序: 最新在前; 每条用短句概括改动, 一点一换行; 每次发版须 prepend 一条真实版本) =====
   const CHANGELOG = [
+    ['v87', [
+      '移除刷新按键'
+    ]],
     ['v86', [
       '修复客户端提前进图'
     ]],

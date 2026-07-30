@@ -59,7 +59,7 @@ const Net = (() => {
   const handlers = {
     open: [], connected: [], state: [], input: [], close: [],
     progress: [], error: [], start: [],
-    reset: [], resync: [], rematchReady: []
+    reset: [], rematchReady: []
   };
   function on(ev, fn) { (handlers[ev] || []).push(fn); }
   function emit(ev, arg) { (handlers[ev] || []).forEach(fn => { try { fn(arg); } catch(e){} }); }
@@ -231,7 +231,6 @@ const Net = (() => {
     else if (msg.t === 'input')  emit('input', msg.c);
     else if (msg.t === 'bye')    emit('close');
     else if (msg.t === 'reset')  emit('reset');
-    else if (msg.t === 'resync') emit('resync');
     else if (msg.t === 'start')  emit('start');
     else if (msg.t === 'rmt')    emit('rematchReady');
     else if (msg.t === 'ping')  { send({ t: 'pong', ts: msg.ts }); } // 收到 ping 立即回 pong
@@ -433,7 +432,6 @@ const Net = (() => {
   function sendState(s) { send({ t: 'state', s }); }
   function sendInput(c) { send({ t: 'input', c }); }
   function sendReset()  { send({ t: 'reset' }); }
-  function sendResync() { send({ t: 'resync' }); }
   function sendBye()    { send({ t: 'bye' }); }
   function sendStart() { send({ t: 'start' }); }
   function sendRematchReady() { send({ t: 'rmt' }); }
@@ -467,7 +465,7 @@ const Net = (() => {
 
   return {
     on, hostRoom, joinRoom, hostRelay, joinRelay,
-    sendState, sendInput, sendReset, sendResync, sendBye, sendStart, sendRematchReady,
+    sendState, sendInput, sendReset, sendBye, sendStart, sendRematchReady,
     setName, getRole, isConnected, getRoomCode, getMode, getRtt, close
   };
 })();
