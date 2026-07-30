@@ -169,6 +169,8 @@ body {
 /* 快速登录(主入口): 大而显眼 */
 .auth-quick {
   width: 100%;
+  display: block;
+  text-align: center;
   font-family: inherit;
   font-size: 14px;
   font-weight: 700;
@@ -353,6 +355,8 @@ body {
 .lobby-btn:disabled { opacity: 0.5; cursor: wait; }
 .lobby-btn.primary {
   color: var(--border);
+  font-size: 11px;
+  font-weight: 700;
   background: linear-gradient(180deg, var(--accent) 0%, var(--accent-dk) 100%);
   box-shadow: 0 0 0 2px var(--accent-dk), 0 4px 0 var(--border), 0 0 16px rgba(95,239,140,0.3);
 }
