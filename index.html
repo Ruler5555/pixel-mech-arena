@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#1a1a2e">
 <meta name="format-detection" content="telephone=no">
 <title>PIXEL MECH ARENA · 像素机甲竞技场</title>
-<link rel="stylesheet" href="css/style.css?v=54">
+<link rel="stylesheet" href="css/style.css?v=57">
 </head>
 <body>
 <div id="app">
@@ -24,7 +24,7 @@
       </div>
       <!-- 主入口: 快速登录(原游客模式, 本设备固定同一账号) -->
       <button id="btnGuest" class="auth-quick">⚡ 快速登录</button>
-      <p class="auth-quick-tip">无需注册 · 仅保存在当前浏览器（换浏览器需重新登录）</p>
+      <p class="auth-quick-tip">无需注册 · 仅保存在当前浏览器</p>
 
       <!-- 次要入口: 账号登录/注册(折叠收纳) -->
       <details class="auth-account">
@@ -56,12 +56,13 @@
         <p>· 密码忘记无法找回, 昵称党建议直接快速登录</p>
       </div>
     </div>
+    <span class="version-tag" id="versionTag">v57</span>
+    <div id="changelogPop" class="changelog-pop hidden"></div>
   </div>
 
   <!-- ===== 主菜单/大厅 ===== -->
   <div id="lobby" class="hidden">
-    <span class="version-tag" id="versionTag">v54</span>
-    <div id="changelogPop" class="changelog-pop hidden"></div>
+    <span class="version-tag lobby-version" id="lobbyVersion">v57</span>
 
     <!-- 玩家信息条 -->
     <div class="player-bar">
@@ -216,16 +217,16 @@
   </div>
 </div>
 
-<script src="vendor/peerjs.min.js?v=54"></script>
-<script src="vendor/mqtt.min.js?v=54"></script>
-<script src="js/auth.js?v=54"></script>
-<script src="js/world.js?v=54"></script>
-<script src="js/input.js?v=54"></script>
-<script src="js/touch.js?v=54"></script>
-<script src="js/sprite.js?v=54"></script>
-<script src="js/player.js?v=54"></script>
-<script src="js/net.js?v=54"></script>
-<script src="js/game.js?v=54"></script>
-<script src="js/main.js?v=54"></script>
+<script src="vendor/peerjs.min.js?v=57"></script>
+<script src="vendor/mqtt.min.js?v=57"></script>
+<script src="js/auth.js?v=57"></script>
+<script src="js/world.js?v=57"></script>
+<script src="js/input.js?v=57"></script>
+<script src="js/touch.js?v=57"></script>
+<script src="js/sprite.js?v=57"></script>
+<script src="js/player.js?v=57"></script>
+<script src="js/net.js?v=57"></script>
+<script src="js/game.js?v=57"></script>
+<script src="js/main.js?v=57"></script>
 </body>
 </html>

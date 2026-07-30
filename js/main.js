@@ -672,16 +672,18 @@
     });
   }
 
-  // ===== 更新公告: 点击右下角版本号显示近五次更新 =====
+  // ===== 更新公告: 点击版本号显示近五次更新(倒序: 最新在前, 每次发版须同步更新) =====
   const CHANGELOG = [
+    ['v54', '登录与公告优化'],
     ['v51', '联机稳定性大修'],
     ['v44', '修复幻影伤害'],
     ['v43', '游客账号固定'],
-    ['v41', '建房按钮修复'],
-    ['v39', '刷新键移右上']
+    ['v41', '建房按钮修复']
   ];
   const versionTag = document.getElementById('versionTag');
   const changelogPop = document.getElementById('changelogPop');
+  const lobbyVersion = document.getElementById('lobbyVersion');
+  if (lobbyVersion && versionTag) lobbyVersion.textContent = versionTag.textContent; // 大厅静态版本号与登录界面同步
   if (versionTag && changelogPop) {
     changelogPop.innerHTML = '<div class="cl-title">更新公告</div>' +
       CHANGELOG.map(c => '<div class="cl-item"><span class="cl-ver">' + c[0] + '</span>' + c[1] + '</div>').join('');
