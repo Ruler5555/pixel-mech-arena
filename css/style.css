@@ -706,11 +706,13 @@ body.in-game .top-cluster {
   pointer-events: auto;
 }
 body.in-game .top-cluster > * { pointer-events: auto; }
+body.in-game .top-cluster { padding: 0 10px; gap: 5px; }
 body.in-game .rtt-tag,
-body.in-game .mode-tag { font-size: 9px; color: var(--text); }
-body.in-game .rtt-tag { color: var(--text); }
-body.in-game .mode-tag { color: var(--text); opacity: 0.85; }
-body.in-game .exit-mobile-btn { font-size: 11px; padding: 4px 10px; }
+body.in-game .mode-tag { font-size: 7px; color: var(--dim); letter-spacing: 0; }
+body.in-game .rtt-tag.good { color: #4ade80; }
+body.in-game .rtt-tag.ok { color: #facc15; }
+body.in-game .rtt-tag.bad { color: #f87171; }
+body.in-game .exit-mobile-btn { font-size: 9px; padding: 3px 9px; }
 
 /* 控制簇: 延迟 + 模式标签 + 退出键 —— 绝对定位于舞台(stage-wrap)右上角,
    浮在画布上方, 不再影响 HUD/画面流式布局; 恢复 v93 时代的旧布局 */
@@ -909,11 +911,37 @@ body.in-game .exit-mobile-btn { font-size: 11px; padding: 4px 10px; }
 @keyframes blink { 50% { opacity: 0.3; } }
 
 /* ===== 响应式 ===== */
+/* 移动端优先: 全屏固定布局, 禁止页面级垂直滚动, 使用 100dvh 适配 iOS Safari 工具栏 */
+html, body {
+  overscroll-behavior: none;
+  -webkit-text-size-adjust: 100%;
+}
 @media (pointer: coarse), (max-width: 820px) {
+  html, body {
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
+  }
+  body {
+    align-items: stretch;
+    padding-bottom: 0;
+  }
+  #app {
+    width: 100%;
+    height: 100dvh;
+    max-height: 100dvh;
+    min-height: auto;
+    overflow: hidden;
+  }
   .touch-controls { display: flex; }
   .controls { display: none; }
   .exit-mobile-btn { display: inline-flex; }
-  body { padding-bottom: 110px; }
+}
+/* 桌面: 默认 460px 居中容器 */
+@media (min-width: 821px) and (hover: hover) {
+  .touch-controls { display: none; }
+  .controls { display: block; }
+  .exit-mobile-btn { display: none; }
 }
 @media (max-width: 700px) {
   #app { width: 100%; }
@@ -922,10 +950,9 @@ body.in-game .exit-mobile-btn { font-size: 11px; padding: 4px 10px; }
   #hud { padding: 8px 10px; gap: 8px; }
   .hub-btn .hb-txt { font-size: 16px; }
 }
-@media (orientation: landscape) and (max-height: 500px) {
-  body { padding-bottom: 82px; }
-}
 
 /* 防止 iOS 长按选中、橡皮筋滚动 */
-html, body { overscroll-behavior: none; -webkit-text-size-adjust: 100%; }
 #app, .stage-wrap, #game, .tbtn { -webkit-touch-callout: none; }
+
+/* 联机大厅世界频道: 高度自适应, 内容过多时可独立滚动 */
+.world-list { max-height: 40dvh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
