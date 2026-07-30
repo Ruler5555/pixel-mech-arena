@@ -155,10 +155,14 @@
   });
 
   // 防止 iOS 双击缩放、长按菜单、滑动橡皮筋
-  // 注意: 不要阻止 .overlay 内按钮(否则"再来一局"点不了)
+  // 关键: 仅阻止【游戏控件】区域的默认手势, 但【绝不】阻止 .overlay 内按钮
+  // —— 退出确认框(#overlay)位于 .stage-wrap 内部, 旧代码把 .stage-wrap 整体 preventDefault,
+  // 导致 touchend 的默认行为被取消、合成的 click 被吞掉, 于是「确认退出 / 继续游戏」点不动
+  const BLOCK_SEL = '.tbtn, .move-zone, .stage-wrap, #game';
   ['touchstart', 'touchmove', 'touchend', 'gesturestart'].forEach((ev) => {
     document.addEventListener(ev, (e) => {
-      if (e.target.closest && e.target.closest('.tbtn, .move-zone, .stage-wrap, #game')) {
+      const t = e.target;
+      if (t && t.closest && t.closest(BLOCK_SEL) && !t.closest('.overlay')) {
         e.preventDefault();
       }
     }, { passive: false });

@@ -66,7 +66,7 @@ body {
   user-select: none;
   transition: transform 0.08s, filter 0.08s, box-shadow 0.08s;
 }
-:active:not(:disabled) { transform: translateY(2px); }
+button:active:not(:disabled) { transform: translateY(2px); }
 
 /* ===== 全局常驻边缘条(规则 + 版本号, 所有界面可见) ===== */
 #persistEdge {
@@ -77,8 +77,7 @@ body {
   align-items: center;
   justify-content: space-between;
   padding: 0 12px;
-  background: rgba(14,14,38,0.82);
-  backdrop-filter: blur(8px);
+  background: rgba(14,14,38,0.96);
   border-bottom: 2px solid var(--border);
   box-shadow: 0 2px 10px rgba(0,0,0,0.35);
   z-index: 50;
@@ -95,6 +94,7 @@ body {
   border-radius: 8px;
   padding: 6px 10px;
   box-shadow: 0 0 0 2px var(--panel);
+  touch-action: manipulation;
 }
 .edge-btn:hover { color: var(--blue); border-color: var(--blue); }
 .edge-btn:active { transform: translateY(2px); filter: brightness(1.25); }
@@ -106,6 +106,7 @@ body {
   letter-spacing: 1px;
   user-select: none;
   -webkit-user-select: none;
+  touch-action: manipulation;
 }
 .version-tag:hover { color: var(--gold); }
 .version-tag:active { color: var(--blue); transform: translateY(1px); }
@@ -138,8 +139,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(10,10,26,0.78);
-  backdrop-filter: blur(2px);
+  background: rgba(8,8,22,0.92);
   padding: 20px;
   animation: fadeIn 0.15s ease-out;
 }
@@ -200,6 +200,7 @@ body {
   -webkit-tap-highlight-color: transparent;
   user-select: none;
   -webkit-user-select: none;
+  touch-action: manipulation;
 }
 .help-btn:active { transform: translateY(2px); filter: brightness(1.2); }
 
@@ -623,8 +624,8 @@ body {
 .room-btn.cancel { color: var(--dim); background: transparent; border-color: var(--panel2); box-shadow: none; }
 .room-btn.cancel:hover { color: var(--red-lt); border-color: var(--red-dk); }
 
-/* 游戏区: 顶部留出常驻边缘条(#persistEdge 高 38px)的空间, 避免 HUD 被遮挡(恢复旧版干净观感) */
-#gameWrap { padding-top: 44px; }
+/* 游戏区: 顶部只留常驻边缘条(#persistEdge 高 38px)的空间, HUD 紧随其下, 不被遮挡也不下移重叠 */
+#gameWrap { padding-top: 38px; }
 
 /* ===== HUD ===== */
 #hud {
@@ -683,11 +684,12 @@ body {
 }
 #game { display: block; width: 100%; height: auto; image-rendering: pixelated; background: #000; }
 
-/* 顶部右侧控制簇: 模式标签 + 退出键, 钉在右上角(在常驻边缘条下方) */
+/* 顶部右侧控制簇: 模式标签 + 退出键 —— 绝对定位于竞技场(stage-wrap)右上角,
+   悬浮在画布上方, 不再与 HUD(血量/回合)重叠; 仅在结算覆盖层下隐藏 */
 .top-cluster {
-  position: fixed;
-  top: calc(env(safe-area-inset-top) + 46px);
-  right: 12px;
+  position: absolute;
+  top: 8px;
+  right: 8px;
   z-index: 35;
   display: flex;
   align-items: center;
@@ -713,8 +715,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(10,10,26,0.85);
-  backdrop-filter: blur(2px);
+  background: rgba(8,8,22,0.92);
   z-index: 40;
 }
 .overlay.hidden { display: none; }
