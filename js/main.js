@@ -60,7 +60,6 @@
   const startBtn = document.getElementById('startBtn');
   const cancelBtn = document.getElementById('cancelBtn');
   const resyncBtn = document.getElementById('resyncBtn');
-  const exitBtn = document.getElementById('exitBtn');
   const modeTag = document.getElementById('gameModeTag');
 
   let exitConfirmMode = false;
@@ -383,8 +382,6 @@
     showOverlay('退出游戏', '确定要离开当前房间?\n\n将返回大厅,对手会断开', '确认退出',
       { cancelable: true, cancelLabel: '继续游戏' });
   };
-  exitBtn.addEventListener('click', onExit);
-  exitBtn.addEventListener('pointerdown', onExit);
 
   // 移动端独立退出按钮(复用 onExit 逻辑, 弹确认对话框并暂停游戏)
   const exitMobileBtn = document.getElementById('exitMobileBtn');
@@ -393,20 +390,23 @@
     exitMobileBtn.addEventListener('pointerdown', onExit);
   }
 
-  // 刷新对局
+  // 刷新对局: 单方面刷新(仅刷新本机视图/要求对手推送最新快照, 绝不重置对局)
   const onResync = (e) => {
     e.preventDefault();
     if (_btnHandled) return;
     _btnHandled = true;
     setTimeout(() => { _btnHandled = false; }, 400);
     if (game.mode === 'host') {
-      Net.sendReset(); game.resetMatch(); game.start();
-      showOverlay('刷新对局', '已重置当前对局\n双方状态已同步', '', { cancelable: true, cancelLabel: '继续' });
+      // 主机点刷新: 立即向对手(客户端)推送最新权威快照; 本机对局继续, 不重置
+      Net.sendState(game._serializeState());
+      showOverlay('刷新', '已向对手推送最新状态\n(本机对局未重置)', '', { cancelable: true, cancelLabel: '继续' });
       setTimeout(hideOverlay, 1200);
     } else if (game.mode === 'client') {
+      // 客户端点刷新: 清空本地插值缓冲, 请求主机推送最新快照; 仅本机视图刷新, 不影响对手
+      if (game.interp) game.interp.foeHasTarget = false;
       Net.sendResync();
-      showOverlay('刷新对局', '已请求主机刷新对局\n等待响应...', '', { cancelable: true, cancelLabel: '继续' });
-      setTimeout(() => { if (overlay.classList.contains('hidden')) return; hideOverlay(); }, 3000);
+      showOverlay('刷新', '已请求主机推送最新状态\n正在重新同步(仅本机视图)', '', { cancelable: true, cancelLabel: '继续' });
+      setTimeout(() => { if (!overlay.classList.contains('hidden')) hideOverlay(); }, 3000);
     }
   };
   resyncBtn.addEventListener('click', onResync);
@@ -562,9 +562,10 @@
     });
     Net.on('error', () => { setStatus('网络错误,请重试', true); });
     Net.on('resync', () => {
+      // 对手请求刷新: 仅向对手推送最新权威快照, 不重置本机对局(单方面刷新)
       if (game.mode === 'host' && Net.isConnected()) {
-        Net.sendReset(); game.resetMatch(); game.start();
-        showOverlay('刷新对局', '对手请求刷新\n已重置当前对局', '', { cancelable: true, cancelLabel: '继续' });
+        Net.sendState(game._serializeState());
+        showOverlay('刷新', '对手请求刷新\n已向其推送最新状态(本机未重置)', '', { cancelable: true, cancelLabel: '继续' });
         setTimeout(hideOverlay, 1200);
       }
     });

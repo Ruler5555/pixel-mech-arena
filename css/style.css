@@ -659,7 +659,7 @@ body {
 }
 .toolbar-actions { display: flex; gap: 6px; }
 .mode-tag { font-size: 7px; color: var(--dim); letter-spacing: 1px; }
-.exit-btn, .resync-btn {
+.resync-btn {
   font-family: inherit;
   font-size: 8px;
   letter-spacing: 1px;
@@ -671,7 +671,6 @@ body {
   cursor: pointer;
   transition: all 0.15s;
 }
-.exit-btn:hover { color: var(--red); border-color: var(--red); }
 .resync-btn { display: none; }
 .resync-btn.visible { display: inline-block; }
 .resync-btn:hover { color: var(--accent); border-color: var(--accent); }
