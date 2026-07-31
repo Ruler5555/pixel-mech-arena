@@ -147,7 +147,11 @@ const Net = (() => {
       });
 
       peer.on('connection', (c) => {
-        if (conn && conn.open && conn !== c) { c.close(); return; } // 已有直连, 丢弃重复
+        // v162: 收到新连接时, 若旧连接未完成协商则先清理(避免并发 ICE 协商混乱, 恢复 v109 单连接穿透)
+        if (conn && conn !== c) {
+          if (conn.open) { c.close(); return; } // 已有可用直连, 丢弃新的
+          try { conn.close(); } catch (e) {}
+        }
         conn = c; mode = 'p2p';
         progress('P2P 直连已建立');
         bindConn(c);
@@ -201,9 +205,14 @@ const Net = (() => {
     });
   }
   // P2P 无限重试: 每次间隔 P2P_RETRY_GAP, 永不放弃(用户可手动点「切换中继」或「返回大厅」)
+  // v162: 重试前清理旧未完成连接 —— 保持"单连接 ICE 协商"(对齐 v109), 避免多个并发 DataConnection
+  // 同时收集候选/互相干扰, 那会降低 NAT 穿透成功率(穿透成功才走真 P2P 低延迟, 失败只能中继高延迟)
   function _tryP2pConnect() {
     if (handshaked) return;
     if (!peer || peer.destroyed) return;
+    // 清理上一个未完成的连接(若已 open 说明协商完成, 不会走到这; 未 open 的旧连接是残留, 关闭)
+    if (conn && !conn.open) { try { conn.close(); } catch (e) {} }
+    conn = null;
     p2pConnectAttempts++;
     progress('P2P 直连尝试 ' + p2pConnectAttempts + ' 次...');
     const c = peer.connect(PEER_PREFIX + roomCode, { reliable: true, serialization: 'json' });
