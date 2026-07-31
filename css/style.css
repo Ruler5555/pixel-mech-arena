@@ -1035,6 +1035,20 @@ html, body {
   .lobby-join .lobby-input { width: 100%; }
   .lobby-join .lobby-btn { width: 100%; }
   .lobby-input { letter-spacing: 2px; } /* 4px 字间距对中文过宽, 收到 2px */
+
+  /* 移动端等待大厅: 整体略微上移, 底部给右下角"连不上?"键让出空间, 避免重叠 */
+  #roomLobby { padding: 48px 14px 96px; }
+  .room-lobby-box { padding: 22px 16px; }
+  .room-code-display { margin-bottom: 16px; }
+  .room-code-label { font-size: 6px; letter-spacing: 1px; }
+  /* 房间号金框: 缩字距+限宽, 确保不超出外面大框 */
+  .room-code {
+    font-size: 24px;
+    letter-spacing: 5px;
+    padding: 12px 14px 12px 19px; /* 左内距补 letter-spacing 视觉偏移 */
+    max-width: 100%;
+    box-sizing: border-box;
+  }
 }
 
 /* 防止 iOS 长按选中、橡皮筋滚动 */
