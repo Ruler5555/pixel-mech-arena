@@ -177,7 +177,7 @@ const Sprite = (() => {
         ctx.strokeStyle = state === 'atkH' ? '#ffcc33' : '#ffffff';
         ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.arc((13) * S, (wY + 1.3) * S, rad * S, 0, Math.PI * 2);
+        ctx.arc((12.5 + thrustX) * S, -(wY + 0.7) * S, rad * S, 0, Math.PI * 2);
         ctx.stroke();
         ctx.restore();
       }

@@ -897,9 +897,9 @@
       if (myRole === 'host') {
         // AI 对战房: 先告知 client 房间玩法(client 仅更新等待提示, 真正进选风格屏要等 host 点「进入选风格」)
         // 补发一次: client 的 showOverlay('已连接'...) 在 await 之后执行, 会盖掉先到的 AI 房提示
-        if (roomMode === 'ai') {
+        if (roomMode === 'ai' && !game.running) {
           Net.sendAiMode();
-          setTimeout(() => { if (Net.isConnected() && roomMode === 'ai') Net.sendAiMode(); }, 900);
+          setTimeout(() => { if (Net.isConnected() && roomMode === 'ai' && !game.running) Net.sendAiMode(); }, 900);
         }
         markPeerJoined(oppName);
       } else {
@@ -922,6 +922,7 @@
       // client 收到: 本房是 AI 对战房 —— 仅更新等待提示, 真正进选风格屏要等 host 发 aipickstart
       if (myRole !== 'client') return;
       roomMode = 'ai';
+      if (game.running) return; // 已在局内(已选风格开打), 不再弹"等待房主选风格"遮罩
       if (!aiPickScreen.classList.contains('hidden')) return; // 已在选风格屏则不打断
       showOverlay('已连接', '🤖 AI 对战房\n等待房主开始选风格...', '');
     });
@@ -935,6 +936,7 @@
     Net.on('aicancel', () => {
       // host 从选风格屏返回了等待大厅: client 也退回等待状态
       if (myRole !== 'client') return;
+      if (game.running) return; // 已在局内, 房主反悔不应打断对局
       aiLocalPickId = null; aiConfirmed = false;
       showGame();
       showOverlay('已连接', '🤖 AI 对战房\n房主返回了等待大厅...', '');
@@ -1008,6 +1010,10 @@
   // ===== 更新公告: 点击版本号显示近三次更新(倒序: 最新在前; 每条用短句概括改动, 一点一换行; 每次发版须 prepend 一条真实版本) =====
   // 文案规则: 每条不超过 30 字, 一条一个圆点, 折行不再出点(见 .cl-pt 悬挂缩进)
   const CHANGELOG = [
+    ['v124', [
+      '修局内反复弹等待房主选风格遮罩',
+      '修攻击波纹错画到地面的坐标 bug'
+    ]],
     ['v122', [
       '修复客户端点再来一局主机收不到'
     ]],
