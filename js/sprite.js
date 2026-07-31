@@ -177,7 +177,8 @@ const Sprite = (() => {
         ctx.strokeStyle = state === 'atkH' ? '#ffcc33' : '#ffffff';
         ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.arc((12.5 + thrustX) * S, -(wY + 0.7) * S, rad * S, 0, Math.PI * 2);
+        // 以"最后挥出的拳头"(武器枪口)中心为基准, 竖直方向略微下移, 视觉更舒服
+        ctx.arc((12.5 + thrustX) * S, -(wY + 1.6) * S, rad * S, 0, Math.PI * 2);
         ctx.stroke();
         ctx.restore();
       }
