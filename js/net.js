@@ -12,18 +12,18 @@
 // 说明: 中继经公共 MQTT broker(EMQX/HiveMQ), 实测 RTT≈500ms, 对实时格斗几乎不可玩,
 //   故仅作"能连上但卡"的最后手段, 绝不静默接管。
 
-// TURN 配置槽: 用于"对称 NAT"兜底 —— 无 TURN 时这类网络会退回公共 broker 中继(200ms+ 高延迟)
-// 根治方案: 部署自托管 coturn(见仓库 deploy/turn/ 目录的 docker-compose 与说明),
-//   启动后把下面的 TURN 凭据填进本数组即生效, 无需改其它代码
-// [免费即用] 已内置 Metered 公共 TURN(openrelay.metered.ca, 20GB/月免费, 跑在 80/443 端口能穿透多数防火墙),
-//   对称 NAT 也能走真·P2P 中继(延迟远低于海外 MQTT broker), 不再被迫走公共 broker
+// ⚠️ 跨网能玩的关键: 必须有一个「活的」TURN 服务器做 NAT 穿透。
+// 默认内置的 openrelay.metered.ca 公共演示服已停服(实测 443/80 均不可达),
+// 会导致跨网 P2P 卡在 TURN 分配超时(~30s)后才失败 → 表现就是"加载半分钟进不去房间"。
+// 解决二选一(填进下面 TURN_SERVERS 即生效, 无需改其它代码):
+//   ① 自托管 coturn: 仓库 deploy/turn/ 已备 docker-compose + 配置 + 说明, 跑在任意有公网 IP 的机器
+//   ② 注册 Metered.ca / Twilio 等 TURN 服务(有免费额度), 拿到你自己的 turn: 地址 + 账号密码填下面
+// 没有可用 TURN 时, 跨网只能走 MQTT 中继(≈500ms, 见 switchToRelay)——这是目前唯一跨网通道。
 const TURN_SERVERS = [
-  // 免费公共 TURN(开箱即用, 无需账号): 对称 NAT 下经它中继实现真·P2P
-  { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
-  { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
-  // 自托管 TURN 填这里(生产更稳, 把上面两条删掉换成你自己的):
+  // ↓↓↓ 把你的 TURN 填在这里(删除下方占位, 换成真实可用的) ↓↓↓
   // { urls: 'turn:turn.your-domain.com:3478?transport=tcp', username: 'pma', credential: 'YOUR_SECRET' },
   // { urls: 'turn:turn.your-domain.com:3478?transport=udp', username: 'pma', credential: 'YOUR_SECRET' }
+  // ↑↑↑ 留空则跨网无法直连, 只能靠「切换中继」按钮走 MQTT(高延迟) ↑↑↑
 ];
 const ICE_SERVERS = {
   iceServers: [
