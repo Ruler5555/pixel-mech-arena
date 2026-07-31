@@ -56,6 +56,14 @@
   const onlineModeSelect = document.getElementById('onlineModeSelect');
   const btnOnlineModeBack = document.getElementById('btnOnlineModeBack');
   const btnOnlineModePvP = document.getElementById('btnOnlineModePvP');
+  const btnOnlineModeAIvAI = document.getElementById('btnOnlineModeAIvAI');
+
+  // ===== DOM: AI 对战选风格屏(早期声明, 避免切屏时 TDZ) =====
+  const aiPickScreen = document.getElementById('aiPickScreen');
+  const btnAIPickBack = document.getElementById('btnAIPickBack');
+  const aiPresetGrid = document.getElementById('aiPresetGrid');
+  const aiPickStatus = document.getElementById('aiPickStatus');
+  const btnAIStart = document.getElementById('btnAIStart');
 
   // ===== DOM: 游戏区 =====
   const gameWrap = document.getElementById('gameWrap');
@@ -84,6 +92,11 @@
   let currentPlayer = null; // {id, name}
   let isGuest = false;
   let sharedToWorld = false;
+  // AI 对战观战模式状态
+  let roomMode = 'pvp';      // 'pvp' | 'ai'
+  let hostPickId = null;     // host 自己选的机甲 AI 风格
+  let clientPickId = null;   // client 选的机甲 AI 风格(host 侧收集)
+  let aiLocalPickId = null;  // 当前玩家(无论 host/client)选的风格
 
   function pct(hp) { return Math.max(0, Math.min(100, hp)) + '%'; }
   function fmtWins(w) {
@@ -120,12 +133,16 @@
     }
     if (game.mode === 'offline') {
       modeTag.textContent = '离线 vs AI';
-    } else if (game.mode === 'host') {
+    } else if (game.mode === 'host' || game.mode === 'aiHost') {
       const m = Net.getMode() === 'relay' ? '中继' : 'P2P';
-      modeTag.textContent = Net.isConnected() ? '主机 · ' + m : '主机 · 等待中';
-    } else if (game.mode === 'client') {
+      modeTag.textContent = Net.isConnected()
+        ? (game.mode === 'aiHost' ? 'AI房主 · ' : '主机 · ') + m
+        : (game.mode === 'aiHost' ? 'AI房主 · 等待中' : '主机 · 等待中');
+    } else if (game.mode === 'client' || game.mode === 'aiClient') {
       const m = Net.getMode() === 'relay' ? '中继' : 'P2P';
-      modeTag.textContent = Net.isConnected() ? '客户端 · ' + m : '客户端 · 重连中';
+      modeTag.textContent = Net.isConnected()
+        ? (game.mode === 'aiClient' ? 'AI观战 · ' : '客户端 · ') + m
+        : (game.mode === 'aiClient' ? 'AI观战 · 重连中' : '客户端 · 重连中');
     }
     // 实时 RTT/状态显示: 对局顶栏常驻, 离线显示「本地」, 联机显示「延迟 Xms / 测速中…」, 按延迟高低变色(绿<80 / 黄<150 / 红)
     if (game.mode === 'offline') {
@@ -154,6 +171,7 @@
     onlineHub.classList.add('hidden');
     modeSelect.classList.add('hidden');
     onlineModeSelect.classList.add('hidden');
+    aiPickScreen.classList.add('hidden');
     leaveGame();
   }
   function showLobby() {
@@ -163,6 +181,7 @@
     onlineHub.classList.add('hidden');
     modeSelect.classList.add('hidden');
     onlineModeSelect.classList.add('hidden');
+    aiPickScreen.classList.add('hidden');
     leaveGame();
     lobby.classList.remove('hidden');
     if (currentPlayer) {
@@ -180,6 +199,7 @@
     gameWrap.classList.add('hidden');
     modeSelect.classList.add('hidden');
     onlineModeSelect.classList.add('hidden');
+    aiPickScreen.classList.add('hidden');
     onlineHub.classList.remove('hidden');
     leaveGame();
   }
@@ -203,6 +223,27 @@
     modeSelect.classList.add('hidden');
     onlineModeSelect.classList.remove('hidden');
     leaveGame();
+  }
+
+  // AI 对战选风格屏: host 与 client 都会进这个屏, 各自选自家机甲 AI 风格
+  function showAIPickScreen() {
+    authScreen.classList.add('hidden');
+    lobby.classList.add('hidden');
+    roomLobby.classList.add('hidden');
+    gameWrap.classList.add('hidden');
+    onlineHub.classList.add('hidden');
+    modeSelect.classList.add('hidden');
+    onlineModeSelect.classList.add('hidden');
+    aiPickScreen.classList.remove('hidden');
+    leaveGame();
+    hideOverlay();
+    renderAIPresets();
+    // 按钮文案按角色(host=开始对战 / client=确认风格)
+    // 注意: host 在进入选风格屏时 game.mode 仍为 'host'(开打时才转 'aiHost')
+    btnAIStart.textContent = (roomMode === 'ai' && game.mode === 'host') ? '开始对战' : '确认风格';
+    aiLocalPickId = null;
+    btnAIStart.disabled = true;
+    updateAIPickStatus();
   }
 
   function authErr(msg) {
@@ -330,6 +371,7 @@
     onlineHub.classList.add('hidden');
     modeSelect.classList.add('hidden');
     onlineModeSelect.classList.add('hidden');
+    aiPickScreen.classList.add('hidden');
     roomLobby.classList.remove('hidden');
     leaveGame();
     roomLobbyCode.textContent = code;
@@ -399,6 +441,7 @@
     onlineHub.classList.add('hidden');
     modeSelect.classList.add('hidden');
     onlineModeSelect.classList.add('hidden');
+    aiPickScreen.classList.add('hidden');
     gameWrap.classList.remove('hidden');
     document.body.classList.add('in-game'); // CSS 切换: 隐藏 persistEdge, topCluster 升为顶栏
   }
@@ -426,6 +469,7 @@
     gameWrap.classList.add('hidden');
     modeSelect.classList.add('hidden');
     onlineModeSelect.classList.add('hidden');
+    aiPickScreen.classList.add('hidden');
     leaveGame();
     lobby.classList.remove('hidden');
     Input.clear();
@@ -602,10 +646,86 @@
   if (btnOnlineModeBack) btnOnlineModeBack.addEventListener('click', () => { showOnlineHub(); });
   if (btnOnlineModePvP) btnOnlineModePvP.addEventListener('click', () => {
     btnOnlineModePvP.disabled = true;
-    startHost().finally(() => { btnOnlineModePvP.disabled = false; });
+    startHost('pvp').finally(() => { btnOnlineModePvP.disabled = false; });
+  });
+  if (btnOnlineModeAIvAI) btnOnlineModeAIvAI.addEventListener('click', () => {
+    btnOnlineModeAIvAI.disabled = true;
+    roomMode = 'ai';
+    startHost('ai').finally(() => { btnOnlineModeAIvAI.disabled = false; });
+  });
+  if (btnAIPickBack) btnAIPickBack.addEventListener('click', () => {
+    Net.close();
+    btnHost.disabled = false; btnJoin.disabled = false;
+    hostPickId = null; clientPickId = null; aiLocalPickId = null; roomMode = 'pvp';
+    showOnlineHub();
+  });
+  if (btnAIStart) btnAIStart.addEventListener('click', () => {
+    if (roomMode === 'ai' && game.mode === 'host') {
+      if (hostPickId && clientPickId) startAIMatch();
+    } else if (aiLocalPickId) {
+      Net.sendAiPick(aiLocalPickId);
+      btnAIStart.disabled = true;
+      updateAIPickStatus();
+    }
   });
 
-  async function startHost() {
+  // ===== AI 对战: 选风格逻辑 =====
+  // 渲染 6 个风格卡片(由全局 AI_PRESETS 生成, 与游戏内定义保持单一来源)
+  function renderAIPresets() {
+    if (!aiPresetGrid) return;
+    aiPresetGrid.innerHTML = '';
+    AI_PRESET_LIST.forEach((id) => {
+      const p = AI_PRESETS[id];
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'ai-preset-card';
+      btn.dataset.id = id;
+      btn.innerHTML = '<div class="ai-preset-emoji">' + p.emoji + '</div>' +
+                      '<div class="ai-preset-name">' + p.name + '</div>' +
+                      '<div class="ai-preset-desc">' + p.desc + '</div>';
+      btn.addEventListener('click', () => selectAIPreset(id));
+      aiPresetGrid.appendChild(btn);
+    });
+  }
+  function selectAIPreset(id) {
+    aiLocalPickId = id;
+    if (aiPresetGrid) {
+      Array.prototype.forEach.call(aiPresetGrid.children, (c) => {
+        c.classList.toggle('selected', c.dataset.id === id);
+      });
+    }
+    if (roomMode === 'ai' && game.mode === 'host') hostPickId = id;
+    updateAIPickStatus();
+  }
+  function updateAIPickStatus() {
+    if (!aiPickStatus) return;
+    const myName = (aiLocalPickId && AI_PRESETS[aiLocalPickId]) ? AI_PRESETS[aiLocalPickId].name : '未选';
+    if (roomMode === 'ai' && game.mode === 'host') {
+      const opp = (clientPickId && AI_PRESETS[clientPickId]) ? AI_PRESETS[clientPickId].name : '等待对手...';
+      aiPickStatus.textContent = '你的AI: ' + myName + ' ｜ 对手AI: ' + opp;
+      btnAIStart.disabled = !(hostPickId && clientPickId);
+    } else {
+      aiPickStatus.textContent = '你的AI: ' + myName +
+        (aiLocalPickId ? ' ｜ 已选择, 等待房主开始...' : ' ｜ 请选择一个风格');
+      btnAIStart.disabled = !aiLocalPickId;
+    }
+  }
+  function startAIMatch() {
+    game.setMode('aiHost');
+    game.setAIPresets(hostPickId, clientPickId);
+    roleP1.textContent = '你的AI';
+    roleP2.textContent = '对手AI';
+    const hp1 = (AI_PRESETS[hostPickId] || AI_PRESETS.balanced).name;
+    const hp2 = (AI_PRESETS[clientPickId] || AI_PRESETS.balanced).name;
+    hudP1Name.textContent = '你的AI·' + hp1;
+    hudP2Name.textContent = '对手AI·' + hp2;
+    Net.sendAiStart({ p1: hostPickId, p2: clientPickId });
+    showGame();
+    game.resetMatch();
+    game.start();
+  }
+
+  async function startHost(modeArg) {
     setStatus('正在创建房间' + loadingDots());
     btnHost.disabled = true;
     Net.setName(currentPlayer ? currentPlayer.name : '玩家');
@@ -613,12 +733,18 @@
     try {
       const code = await Net.hostRoom();
       game.setMode('host');
-      roleP1.textContent = '你';
-      roleP2.textContent = '对手';
-      hudP1Name.textContent = currentPlayer ? currentPlayer.name : 'BLUE-01';
-      showRoomLobby(code);
-      const mode = Net.getMode() === 'relay' ? '中继' : 'P2P';
-      setStatus('房号: ' + code + ' (' + mode + ')<br>等待对手加入' + loadingDots());
+      if (modeArg === 'ai') {
+        // AI 对战: host 先去选风格屏, 等 client 连入后再通知对方也选
+        showAIPickScreen();
+        setStatus('');
+      } else {
+        roleP1.textContent = '你';
+        roleP2.textContent = '对手';
+        hudP1Name.textContent = currentPlayer ? currentPlayer.name : 'BLUE-01';
+        showRoomLobby(code);
+        const mode = Net.getMode() === 'relay' ? '中继' : 'P2P';
+        setStatus('房号: ' + code + ' (' + mode + ')<br>等待对手加入' + loadingDots());
+      }
     } catch (e) {
       setStatus('创建失败: ' + (e.message || e), true);
       btnHost.disabled = false;
@@ -689,7 +815,12 @@
       if (reconnecting) {
         clearReconnect();
         hideOverlay();
-        if (game.mode === 'host') { game.resetMatch(); game.start(); }
+        if (game.mode === 'host' && game.running) { game.resetMatch(); game.start(); }
+        return;
+      }
+      // AI 对战: host 已在选风格屏; 通知 client 也去选风格(双方各自选自家 AI)
+      if (roomMode === 'ai' && game.mode === 'host') {
+        Net.sendAiMode();
         return;
       }
       // host: 对手已加入, 显示开始按钮
@@ -715,8 +846,38 @@
         game.start();
       }
     });
+    // ===== AI 对战专用事件 =====
+    Net.on('aimode', () => {
+      // client 收到: 本房是 AI 对战, 进入选风格屏
+      if (game.mode !== 'client') return;
+      roomMode = 'ai';
+      showAIPickScreen();
+    });
+    Net.on('aipick', (id) => {
+      // host 收到 client 选的风格
+      if (game.mode !== 'host' || roomMode !== 'ai') return;
+      clientPickId = id || 'balanced';
+      updateAIPickStatus();
+    });
+    Net.on('aistart', (cfg) => {
+      // client 收到: 双方风格下发, 开始观战对打
+      if (game.mode !== 'client' || roomMode !== 'ai') return;
+      game.setMode('aiClient');
+      game.setAIPresets(cfg.p1, cfg.p2);
+      roleP1.textContent = '对手AI';
+      roleP2.textContent = '你的AI';
+      const hp1 = (AI_PRESETS[cfg.p1] || AI_PRESETS.balanced).name;
+      const hp2 = (AI_PRESETS[cfg.p2] || AI_PRESETS.balanced).name;
+      hudP1Name.textContent = '对手AI·' + hp1;
+      hudP2Name.textContent = '你的AI·' + hp2;
+      hideOverlay();
+      showGame();
+      game.resetMatch();
+      game.start();
+    });
     Net.on('state', (s) => {
       if (game.mode === 'client') game.applyRemoteState(s);
+      else if (game.mode === 'aiClient') game.applySpectateState(s);
     });
     Net.on('input', (c) => {
       if (game.mode === 'host') game.applyRemoteInput(c);
@@ -740,7 +901,7 @@
     Net.on('error', () => { setStatus('网络错误,请重试', true); });
 
     Net.on('reset', () => {
-      if (game.mode === 'client') {
+      if (game.mode === 'client' || game.mode === 'aiClient') {
         resetRematchState();
         game.interp.foeHasTarget = false;
         game.resetMatch(); game.start();
@@ -760,6 +921,10 @@
 
   // ===== 更新公告: 点击版本号显示近三次更新(倒序: 最新在前; 每条用短句概括改动, 一点一换行; 每次发版须 prepend 一条真实版本) =====
   const CHANGELOG = [
+    ['v114', [
+      '联机新增「AI 对战」玩法: 双方各自为机甲 AI 挑战斗风格, 观战两台 AI 自动对打(BO3)',
+      '6 种风格: 均衡/猛攻/铁壁/游击/疾风/精准, 房主与对手选好后自动开打'
+    ]],
     ['v113', [
       '首页「副本」按钮更名为「单人模式」',
       '连带玩法屏标题改为「选择单人模式玩法」, 与联机大厅对仗'

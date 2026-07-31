@@ -628,6 +628,57 @@ button:active:not(:disabled) { transform: translateY(2px); }
   opacity: 0.6;
 }
 
+/* AI 对战入口按钮(区别于双人对战的蓝色) */
+.ms-mode-btn.ai { border-color: #6f5bd6; box-shadow: 0 0 0 2px #6f5bd6, 0 4px 0 var(--border); }
+.ms-mode-btn.ai .hb-txt { color: #b9a8ff; }
+
+/* ===== AI 对战 · 选风格屏 ===== */
+.ai-pick-tip {
+  font-size: 8px; color: var(--dim); letter-spacing: 1px; text-align: center;
+  line-height: 1.6; margin: 0 4px 4px;
+}
+.ai-preset-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  width: 100%;
+  max-width: 360px;
+  margin: 0 auto;
+}
+.ai-preset-card {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 16px 10px;
+  background: var(--panel);
+  border: 3px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 0 0 2px var(--panel2), 0 4px 0 var(--border);
+  text-align: center; cursor: pointer; color: var(--text);
+  transition: transform 0.08s, filter 0.08s;
+}
+.ai-preset-card:active:not(:disabled) { transform: translateY(2px); filter: brightness(1.2); }
+.ai-preset-card.selected {
+  border-color: #6f5bd6;
+  box-shadow: 0 0 0 2px #6f5bd6, 0 4px 0 var(--border);
+  filter: brightness(1.12);
+}
+.ai-preset-emoji { font-size: 26px; filter: drop-shadow(2px 2px 0 var(--border)); }
+.ai-preset-name { font-size: 11px; color: #b9a8ff; letter-spacing: 2px; text-shadow: 1px 1px 0 var(--border); }
+.ai-preset-desc { font-size: 6px; color: var(--dim); letter-spacing: 0.5px; line-height: 1.4; }
+.ai-pick-status {
+  font-size: 8px; color: var(--text); letter-spacing: 1px; text-align: center;
+  min-height: 16px; margin-top: 2px;
+}
+.big-btn {
+  width: 100%; max-width: 360px; padding: 16px;
+  font-size: 12px; letter-spacing: 3px; color: #fff;
+  background: var(--blue); border: 3px solid var(--border);
+  border-radius: 14px; box-shadow: 0 4px 0 var(--border);
+  cursor: pointer; transition: transform 0.08s, filter 0.08s;
+}
+.big-btn.ai { background: #6f5bd6; }
+.big-btn:active:not(:disabled) { transform: translateY(2px); filter: brightness(1.2); }
+.big-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
 /* ===== 房间等待大厅 ===== */
 #roomLobby {
   display: flex;

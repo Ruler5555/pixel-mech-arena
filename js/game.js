@@ -27,8 +27,33 @@ class Particle {
   }
 }
 
-// 简单 AI 控器(仅离线模式使用)
-function makeAI() {
+// 机甲 AI 战斗风格预设(联机「AI 对战观战」模式用)
+// 每个 preset 是一组决策参数, 决定 AI 的"性格"; 玩家在赛前为自家机甲 AI 选一个
+const AI_PRESETS = {
+  balanced:   { id:'balanced',   name:'均衡', emoji:'⚖️', desc:'攻防节奏均衡, 适合新手',
+    reactMin:0.25, reactMax:0.55, defendProb:0.60, approachDist:130, closeDist:60,
+    closeL:0.50, closeH:0.20, closeBack:0.30, midApproach:0.60, midL:0.25, midDef:0.15, jumpProb:0.00 },
+  berserker:  { id:'berserker',  name:'猛攻', emoji:'🔥', desc:'高频贴脸重击, 防御薄弱',
+    reactMin:0.15, reactMax:0.35, defendProb:0.25, approachDist:150, closeDist:50,
+    closeL:0.35, closeH:0.45, closeBack:0.20, midApproach:0.70, midL:0.25, midDef:0.05, jumpProb:0.05 },
+  bulwark:    { id:'bulwark',    name:'铁壁', emoji:'🛡️', desc:'高防御反击, 龟缩消耗',
+    reactMin:0.20, reactMax:0.40, defendProb:0.85, approachDist:120, closeDist:70,
+    closeL:0.30, closeH:0.10, closeBack:0.30, midApproach:0.40, midL:0.20, midDef:0.40, jumpProb:0.00 },
+  skirmisher: { id:'skirmisher', name:'游击', emoji:'🏹', desc:'打了就跑, 走位风筝',
+    reactMin:0.20, reactMax:0.45, defendProb:0.40, approachDist:140, closeDist:55,
+    closeL:0.40, closeH:0.20, closeBack:0.40, midApproach:0.50, midL:0.35, midDef:0.15, jumpProb:0.10 },
+  gale:       { id:'gale',       name:'疾风', emoji:'🌪️', desc:'高频跳跃穿插, 灵动机动',
+    reactMin:0.15, reactMax:0.35, defendProb:0.30, approachDist:150, closeDist:60,
+    closeL:0.60, closeH:0.20, closeBack:0.20, midApproach:0.70, midL:0.25, midDef:0.05, jumpProb:0.35 },
+  precision:  { id:'precision',  name:'精准', emoji:'🎯', desc:'反应极快, 抓帧惩罚',
+    reactMin:0.10, reactMax:0.25, defendProb:0.75, approachDist:130, closeDist:65,
+    closeL:0.55, closeH:0.25, closeBack:0.20, midApproach:0.55, midL:0.25, midDef:0.20, jumpProb:0.05 }
+};
+const AI_PRESET_LIST = ['balanced','berserker','bulwark','skirmisher','gale','precision'];
+
+// 简单 AI 控器: 接受 preset(决策参数), 每 reactTimer 秒重掷一次决策(加权随机状态机)
+function makeAI(cfg) {
+  cfg = cfg || AI_PRESETS.balanced;
   return {
     reactTimer: 0,
     decision: 'idle',
@@ -42,21 +67,25 @@ function makeAI() {
 
       this.reactTimer -= dt;
       if (this.reactTimer <= 0) {
-        this.reactTimer = 0.25 + Math.random() * 0.3;
+        this.reactTimer = cfg.reactMin + Math.random() * (cfg.reactMax - cfg.reactMin);
         const foeActive = foe.attackActive();
-        if (foeActive && dist < 90 && Math.random() < 0.6) this.decision = 'defend';
-        else if (dist > 130) this.decision = 'approach';
-        else if (dist < 60) {
+        if (foeActive && dist < 90 && Math.random() < cfg.defendProb) this.decision = 'defend';
+        else if (dist > cfg.approachDist) this.decision = 'approach';
+        else if (dist < cfg.closeDist) {
           const r = Math.random();
-          if (r < 0.5) this.decision = 'atkL';
-          else if (r < 0.7) this.decision = 'atkH';
+          const s = cfg.closeL + cfg.closeH + cfg.closeBack;
+          if (r < cfg.closeL / s) this.decision = 'atkL';
+          else if (r < (cfg.closeL + cfg.closeH) / s) this.decision = 'atkH';
           else this.decision = 'back';
         } else {
           const r = Math.random();
-          if (r < 0.6) this.decision = 'approach';
-          else if (r < 0.85) this.decision = 'atkL';
+          const s = cfg.midApproach + cfg.midL + cfg.midDef;
+          if (r < cfg.midApproach / s) this.decision = 'approach';
+          else if (r < (cfg.midApproach + cfg.midL) / s) this.decision = 'atkL';
           else this.decision = 'defend';
         }
+        // 偶尔跳跃(默认 0, 仅部分风格会跳)
+        if (cfg.jumpProb > 0 && self.onGround && Math.random() < cfg.jumpProb) this.decision = 'jump';
       }
       switch (this.decision) {
         case 'approach': if (dir > 0) ctrl.right = true; else ctrl.left = true; break;
@@ -64,9 +93,11 @@ function makeAI() {
         case 'atkL': if (!this._last.atkL && self.onGround && self.cooldown <= 0) ctrl.tapL = true; break;
         case 'atkH': if (!this._last.atkH && self.onGround && self.cooldown <= 0) ctrl.tapH = true; break;
         case 'defend': ctrl.defend = true; break;
+        case 'jump': if (!this._last.jump && self.onGround && self.jumpCount < 2) ctrl.tapJump = true; break;
       }
       this._last.atkL = ctrl.tapL;
       this._last.atkH = ctrl.tapH;
+      this._last.jump = ctrl.tapJump;
       return ctrl;
     }
   };
@@ -78,7 +109,7 @@ function emptyCtrl() {
 }
 
 const STATES = { READY:'ready', FIGHT:'fight', ROUND_END:'roundEnd', MATCH_END:'matchEnd' };
-const MODES  = { OFFLINE:'offline', HOST:'host', CLIENT:'client' };
+const MODES  = { OFFLINE:'offline', HOST:'host', CLIENT:'client', AI_HOST:'aiHost', AI_CLIENT:'aiClient' };
 
 // 触屏设备检测(移动端不显示 R/ESC 等键盘提示)
 const IS_TOUCH_UI = (typeof window !== 'undefined') &&
@@ -95,7 +126,11 @@ class Game {
 
     this.p1 = null;
     this.p2 = null;
-    this.ai = null;
+    this.ai = null;       // 离线模式 P2 AI
+    this.ai1 = null;      // AI 对战模式 P1(蓝) AI
+    this.ai2 = null;      // AI 对战模式 P2(红) AI
+    this.aiPresetP1 = null; // 玩家为 P1 机甲 AI 选的风格
+    this.aiPresetP2 = null; // 玩家为 P2 机甲 AI 选的风格
     this.particles = [];
     this.shake = 0;
 
@@ -142,13 +177,21 @@ class Game {
   // ===== 模式设置 =====
   setMode(mode) {
     this.mode = mode;
-    this.localPlayer = (mode === MODES.CLIENT) ? 2 : 1;
+    this.localPlayer = (mode === MODES.CLIENT || mode === MODES.AI_CLIENT) ? 2 : 1;
+  }
+
+  // 设置 AI 对战模式的双方机甲 AI 风格(id 对应 AI_PRESETS)
+  setAIPresets(p1Id, p2Id) {
+    this.aiPresetP1 = AI_PRESETS[p1Id] || AI_PRESETS.balanced;
+    this.aiPresetP2 = AI_PRESETS[p2Id] || AI_PRESETS.balanced;
   }
 
   _resetMechs() {
     this.p1 = new Mech({ x: 180, groundY: this.groundY, facing: 1, color: 'blue', name: 'BLUE-01' });
     this.p2 = new Mech({ x: 460, groundY: this.groundY, facing: -1, color: 'red', name: 'RED-X' });
     this.ai = makeAI();
+    this.ai1 = makeAI(this.aiPresetP1 || AI_PRESETS.balanced);
+    this.ai2 = makeAI(this.aiPresetP2 || AI_PRESETS.balanced);
     this.remoteCtrl = emptyCtrl();
   }
 
@@ -217,6 +260,13 @@ class Game {
       return;
     }
 
+    // ===== 观战客户端模式(AI 对战): 纯镜像, 不跑本地物理, 不发送输入 =====
+    // 两台机甲都由 host 广播, 由 applySpectateState 直接套用(见 net 'state' 回调)
+    if (this.mode === MODES.AI_CLIENT) {
+      this.particles = this.particles.filter(p => { p.update(dt); return p.life > 0; });
+      return;
+    }
+
     // ===== 客户端模式: 本地预测 + 对手插值 =====
     if (this.mode === MODES.CLIENT) {
       // 输入上报: 每 50ms 或变化时发, 减少带宽
@@ -251,10 +301,12 @@ class Game {
       this.timerAcc += dt;
       if (this.timerAcc >= 1) { this.timerAcc -= 1; this.timer = Math.max(0, this.timer - 1); }
 
-      const c1 = this._localCtrl();
+      const c1 = (this.mode === MODES.AI_HOST) ? this.ai1.compute(this.p1, this.p2, dt) : this._localCtrl();
       let c2;
       if (this.mode === MODES.HOST) {
         c2 = this.remoteCtrl; // 来自 client
+      } else if (this.mode === MODES.AI_HOST) {
+        c2 = this.ai2.compute(this.p2, this.p1, dt);
       } else {
         c2 = this.ai.compute(this.p2, this.p1, dt);
       }
@@ -303,8 +355,8 @@ class Game {
       this.p2.update(dt, emptyCtrl(), this.p1, this);
     }
 
-    // ===== host: 定时广播 state =====
-    if (this.mode === MODES.HOST && Net.isConnected()) {
+    // ===== host / aiHost: 定时广播 state =====
+    if ((this.mode === MODES.HOST || this.mode === MODES.AI_HOST) && Net.isConnected()) {
       this.syncAcc += dt;
       if (this.syncAcc >= 1 / 30) { // 30Hz
         this.syncAcc = 0;
@@ -365,6 +417,26 @@ class Game {
         this._spawnHitFX(this.p1.x + (this.p2.x > this.p1.x ? 20 : -20), this.p1.y - 40, false, (localPrevHp - this.p1.hp) >= 15);
       }
     }
+    this.round = s.round;
+    this.winsP1 = s.winsP1;
+    this.winsP2 = s.winsP2;
+    this.timer = s.timer;
+    this.roundWinner = s.rw;
+    this.shake = s.shake;
+    if (s.gs !== this.state) this.setState(s.gs);
+    this.stateTime = s.gst;
+  }
+  // 观战模式(AI 对战): 两台机甲都来自 host 广播, 直接硬套(客户端无本地预测, 30Hz 镜像)
+  applySpectateState(s) {
+    if (!s) return;
+    // 丢弃过期/重复快照(与 applyRemoteState 同样的去重逻辑)
+    if (s.frame !== undefined) {
+      if (this._lastStateFrame && s.frame <= this._lastStateFrame &&
+          this._lastStateFrame - s.frame < 3600) return;
+      this._lastStateFrame = s.frame;
+    }
+    this._applyMech(this.p1, s.p1);
+    this._applyMech(this.p2, s.p2);
     this.round = s.round;
     this.winsP1 = s.winsP1;
     this.winsP2 = s.winsP2;
@@ -586,8 +658,8 @@ class Game {
 
     Sprite.drawBackground(ctx, this.W, this.H, this.frame);
 
-    // 己方机甲金色描边: offline/host 本地是 P1, client 本地是 P2
-    const localMech = (this.mode === MODES.CLIENT) ? this.p2 : this.p1;
+    // 己方机甲金色描边: offline/host/aiHost 本地是 P1, client/aiClient 本地是 P2(你的 AI)
+    const localMech = (this.mode === MODES.CLIENT || this.mode === MODES.AI_CLIENT) ? this.p2 : this.p1;
     const list = [this.p1, this.p2].sort((a, b) => a.y - b.y);
     list.forEach(m => m.draw(ctx, m === localMech));
 

@@ -61,7 +61,8 @@ const Net = (() => {
   const handlers = {
     open: [], connected: [], state: [], input: [], close: [],
     progress: [], error: [], start: [],
-    reset: [], rematchReady: []
+    reset: [], rematchReady: [],
+    aimode: [], aipick: [], aistart: []
   };
   function on(ev, fn) { (handlers[ev] || []).push(fn); }
   function emit(ev, arg) { (handlers[ev] || []).forEach(fn => { try { fn(arg); } catch(e){} }); }
@@ -236,6 +237,9 @@ const Net = (() => {
     else if (msg.t === 'reset')  emit('reset');
     else if (msg.t === 'start')  emit('start');
     else if (msg.t === 'rmt')    emit('rematchReady');
+    else if (msg.t === 'aimode') emit('aimode');                                 // host 通知 client: 本房是 AI 对战, 去选风格
+    else if (msg.t === 'aipick') emit('aipick', msg.id);                         // client 把自己选的风格 id 发给 host
+    else if (msg.t === 'aistart') emit('aistart', msg.cfg);                      // host 把双方风格下发给 client 并开打
     else if (msg.t === 'ping')  { send({ t: 'pong', ts: msg.ts }); } // 收到 ping 立即回 pong
     else if (msg.t === 'pong')  { const r = Date.now() - (msg.ts || 0); if (r >= 0 && r < 10000) rtt = r; } // 计算 RTT
   }
@@ -457,6 +461,10 @@ const Net = (() => {
   function sendBye()    { send({ t: 'bye' }); }
   function sendStart() { send({ t: 'start' }); }
   function sendRematchReady() { send({ t: 'rmt' }); }
+  // ===== AI 对战观战模式专用消息 =====
+  function sendAiMode() { send({ t: 'aimode' }); }
+  function sendAiPick(id) { send({ t: 'aipick', id }); }
+  function sendAiStart(cfg) { send({ t: 'aistart', cfg }); }
 
   function getRole() { return role; }
   function isConnected() {
@@ -488,6 +496,7 @@ const Net = (() => {
   return {
     on, hostRoom, joinRoom, hostRelay, joinRelay,
     sendState, sendInput, sendReset, sendBye, sendStart, sendRematchReady,
+    sendAiMode, sendAiPick, sendAiStart,
     setName, getRole, isConnected, getRoomCode, getMode, getRtt, close
   };
 })();
