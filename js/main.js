@@ -52,6 +52,11 @@
   const btnModeBack = document.getElementById('btnModeBack');
   const btnModeAI = document.getElementById('btnModeAI');
 
+  // ===== DOM: 联机玩法选择屏(早期声明, 避免切屏时 TDZ) =====
+  const onlineModeSelect = document.getElementById('onlineModeSelect');
+  const btnOnlineModeBack = document.getElementById('btnOnlineModeBack');
+  const btnOnlineModePvP = document.getElementById('btnOnlineModePvP');
+
   // ===== DOM: 游戏区 =====
   const gameWrap = document.getElementById('gameWrap');
   const elHpP1 = document.getElementById('hpP1');
@@ -148,6 +153,7 @@
     gameWrap.classList.add('hidden');
     onlineHub.classList.add('hidden');
     modeSelect.classList.add('hidden');
+    onlineModeSelect.classList.add('hidden');
     leaveGame();
   }
   function showLobby() {
@@ -156,6 +162,7 @@
     gameWrap.classList.add('hidden');
     onlineHub.classList.add('hidden');
     modeSelect.classList.add('hidden');
+    onlineModeSelect.classList.add('hidden');
     leaveGame();
     lobby.classList.remove('hidden');
     if (currentPlayer) {
@@ -172,6 +179,7 @@
     roomLobby.classList.add('hidden');
     gameWrap.classList.add('hidden');
     modeSelect.classList.add('hidden');
+    onlineModeSelect.classList.add('hidden');
     onlineHub.classList.remove('hidden');
     leaveGame();
   }
@@ -183,6 +191,17 @@
     gameWrap.classList.add('hidden');
     onlineHub.classList.add('hidden');
     modeSelect.classList.remove('hidden');
+    leaveGame();
+  }
+
+  function showOnlineModeSelect() {
+    authScreen.classList.add('hidden');
+    lobby.classList.add('hidden');
+    roomLobby.classList.add('hidden');
+    gameWrap.classList.add('hidden');
+    onlineHub.classList.add('hidden');
+    modeSelect.classList.add('hidden');
+    onlineModeSelect.classList.remove('hidden');
     leaveGame();
   }
 
@@ -310,6 +329,7 @@
     gameWrap.classList.add('hidden');
     onlineHub.classList.add('hidden');
     modeSelect.classList.add('hidden');
+    onlineModeSelect.classList.add('hidden');
     roomLobby.classList.remove('hidden');
     leaveGame();
     roomLobbyCode.textContent = code;
@@ -378,6 +398,7 @@
     roomLobby.classList.add('hidden');
     onlineHub.classList.add('hidden');
     modeSelect.classList.add('hidden');
+    onlineModeSelect.classList.add('hidden');
     gameWrap.classList.remove('hidden');
     document.body.classList.add('in-game'); // CSS 切换: 隐藏 persistEdge, topCluster 升为顶栏
   }
@@ -404,6 +425,7 @@
     hideRoomLobby();
     gameWrap.classList.add('hidden');
     modeSelect.classList.add('hidden');
+    onlineModeSelect.classList.add('hidden');
     leaveGame();
     lobby.classList.remove('hidden');
     Input.clear();
@@ -575,7 +597,13 @@
   if (btnOpenOnline) btnOpenOnline.addEventListener('click', () => { showOnlineHub(); });
   if (btnBackHub) btnBackHub.addEventListener('click', () => { showLobby(); });
 
-  btnHost.addEventListener('click', () => startHost());
+  btnHost.addEventListener('click', () => showOnlineModeSelect());
+
+  if (btnOnlineModeBack) btnOnlineModeBack.addEventListener('click', () => { showOnlineHub(); });
+  if (btnOnlineModePvP) btnOnlineModePvP.addEventListener('click', () => {
+    btnOnlineModePvP.disabled = true;
+    startHost().finally(() => { btnOnlineModePvP.disabled = false; });
+  });
 
   async function startHost() {
     setStatus('正在创建房间' + loadingDots());
@@ -732,6 +760,10 @@
 
   // ===== 更新公告: 点击版本号显示近三次更新(倒序: 最新在前; 每条用短句概括改动, 一点一换行; 每次发版须 prepend 一条真实版本) =====
   const CHANGELOG = [
+    ['v110', [
+      '联机创建房间新增「选择联机玩法」屏(点创建房间先选玩法)',
+      '暂仅「双人对战」1v1, 预留入口便于后续扩展更多联机玩法'
+    ]],
     ['v109', [
       '联机策略: P2P 直连优先, 中继降为并行备用(仅保联机房)',
       'P2P 宽限延至20s, 直连迟到自动接管, 不再卡800ms中继',
