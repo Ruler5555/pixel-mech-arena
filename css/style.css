@@ -556,8 +556,7 @@ button:active:not(:disabled) { transform: translateY(2px); }
   padding: 50px 16px 24px;
   animation: fadeIn 0.4s ease-out;
 }
-/* 联机玩法屏额外下移, 让「← 返回」键避开固定常驻顶栏(persistEdge) */
-#onlineModeSelect { padding-top: 66px; }
+/* 联机玩法屏复用联机大厅的 .ol-top 顶栏(返回键/标题位置与联机大厅一致) */
 .ms-top {
   display: grid;
   grid-template-columns: 1fr auto 1fr;

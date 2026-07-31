@@ -15,7 +15,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" media="print" onload="this.media='all'">
 <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap"></noscript>
-<link rel="stylesheet" href="css/style.css?v=111">
+<link rel="stylesheet" href="css/style.css?v=112">
 </head>
 <body>
 <div id="app">
@@ -23,7 +23,7 @@
   <!-- ===== 全局常驻边缘: 规则 + 版本号(所有界面可见, 不滚动即可见) ===== -->
   <div id="persistEdge">
     <button id="rulesBtn" class="edge-btn" aria-label="游戏规则">规则?</button>
-    <span id="versionTag" class="version-tag">v111</span>
+    <span id="versionTag" class="version-tag">v112</span>
   </div>
 
   <!-- ===== 登录界面 ===== -->
@@ -153,9 +153,9 @@
 
   <!-- ===== 联机玩法选择屏(创建房间时先选玩法, 暂仅双人对战, 后续扩展) ===== -->
   <div id="onlineModeSelect" class="hidden">
-    <div class="ms-top">
+    <div class="ol-top">
       <button id="btnOnlineModeBack" class="bar-btn">← 返回</button>
-      <span class="ms-title">选择联机玩法</span>
+      <span class="ol-title">选择联机玩法</span>
       <span class="ol-spacer"></span>
     </div>
     <div class="ms-body">
@@ -306,16 +306,16 @@
 </div>
 
 <!-- 所有脚本加 defer: 并行下载、按序执行、不阻塞首屏 DOM 解析; 加快首屏可点 -->
-<script defer src="vendor/peerjs.min.js?v=111"></script>
-<script defer src="vendor/mqtt.min.js?v=111"></script>
-<script defer src="js/auth.js?v=111"></script>
-<script defer src="js/world.js?v=111"></script>
-<script defer src="js/input.js?v=111"></script>
-<script defer src="js/touch.js?v=111"></script>
-<script defer src="js/sprite.js?v=111"></script>
-<script defer src="js/player.js?v=111"></script>
-<script defer src="js/net.js?v=111"></script>
-<script defer src="js/game.js?v=111"></script>
-<script defer src="js/main.js?v=111"></script>
+<script defer src="vendor/peerjs.min.js?v=112"></script>
+<script defer src="vendor/mqtt.min.js?v=112"></script>
+<script defer src="js/auth.js?v=112"></script>
+<script defer src="js/world.js?v=112"></script>
+<script defer src="js/input.js?v=112"></script>
+<script defer src="js/touch.js?v=112"></script>
+<script defer src="js/sprite.js?v=112"></script>
+<script defer src="js/player.js?v=112"></script>
+<script defer src="js/net.js?v=112"></script>
+<script defer src="js/game.js?v=112"></script>
+<script defer src="js/main.js?v=112"></script>
 </body>
 </html>
