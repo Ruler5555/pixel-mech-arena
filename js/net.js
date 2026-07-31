@@ -89,7 +89,7 @@ const Net = (() => {
   let _joinReject = null;  // client joinRoom 的 rejector(用户取消时调用)
   let p2pRetryTimer = null;
   let p2pConnectAttempts = 0;
-  const P2P_RETRY_GAP = 1500;  // 每次间隔 1.5s, 无限重试
+  const P2P_RETRY_GAP = 8000;  // v163: 8s 重试间隔(对齐 v109 单连接协商哲学: ICE 收集TURN/STUN候选+穿透检查需2-6s, 1.5s 太短会放弃未完成的协商 → 进不去房间)
   let keepAliveTimer = null;
   let pingTimer = null;
   let mqttClient = null;
