@@ -61,7 +61,12 @@ const Net = (() => {
   let rtt = 0;          // [保留] 兼容旧引用; 实际改用 p2pRtt / relayRtt + lastStateChannel
   let p2pRtt = 0;       // P2P 通道往返时延(ms)
   let relayRtt = 0;     // 中继通道往返时延(ms)
-  let lastStateChannel = 'p2p'; // 最近一次承载 gameplay state 的通道(P2P 优先, P2P 死则中继)
+  let lastStateChannel = 'p2p'; // 仅作镜像, 真正由 liveness 监测(p2pDead)驱动, 避免"谁先到谁赢"竞态
+  let p2pDead = false;        // [v143 修复] P2P 被 liveness 判死(半死/断开) → gameplay 改走中继兜底
+  let p2pHealthyStreak = 0;   // 连续健康时长(ms), 满足 P2P_RESUME_MS 才回切 P2P, 防抖动
+  const P2P_DEAD_MS = 1500;   // P2P 静默超此值(≈45帧@30Hz)判定死亡
+  const P2P_RESUME_MS = 3000; // 需连续健康这么久才回切 P2P(迟滞)
+  let livenessTimer = null;
   let pingTimer = null; // 周期性 ping 定时器
 
   // [致命修复] 旧版事件表漏了 reset/resync 键: on('reset')/on('resync') 注册进的是
@@ -239,14 +244,38 @@ const Net = (() => {
   function _sendPing() { if (isConnected()) send({ t: 'ping', ts: Date.now() }); }
   function _startPingMonitor() { clearInterval(pingTimer); pingTimer = setInterval(_sendPing, 1000); }
   function _stopPingMonitor() { clearInterval(pingTimer); pingTimer = null; }
-  // 有效延迟 = 当前实际承载 gameplay state 的通道往返时延(而非 ping 所在通道),
-  // 避免 P2P↔中继切换时右上角数字无意义乱跳; 你看到的即你实际感受到的延迟
-  function getRtt() {
-    if (lastStateChannel === 'relay' && relayRtt > 0) return relayRtt;
-    if (p2pRtt > 0) return p2pRtt;
-    return relayRtt; // 极端情况: 仅中继连上时也能显示
+  // [v143 修复] P2P 活性监测: 替代 v142"state 双发同序号"方案(该方案中继副本因同序号被去重,
+  // 既补不了 P2P 丢帧, 又因竞态把右上角延迟钉死在 260)。这里改为: state 单通道发送,
+  // 但 liveness 监测 P2P 是否真在收数据 —— 半死/断开即回落中继(state 改走中继), 恢复后带迟滞回切 P2P。
+  function _startLiveness() {
+    clearInterval(livenessTimer);
+    livenessTimer = setInterval(() => {
+      const up = !!(conn && conn.open);
+      const silence = Date.now() - (lastP2pRecv || 0);
+      if (up && silence < P2P_DEAD_MS) {
+        // P2P 活跃: 累计健康时长, 满阈值才回切 P2P, 避免网络抖动时反复横跳
+        p2pHealthyStreak += 500;
+        if (p2pHealthyStreak >= P2P_RESUME_MS) p2pDead = false;
+      } else {
+        p2pHealthyStreak = 0;
+        // P2P 断开或静默过久 → 中继可用则判死, gameplay 改走中继兜底(真实跨网修复点)
+        if (mqttClient && mqttClient.connected) {
+          if (!p2pDead) { p2pDead = true; progress('P2P 不稳, 回落中继通道(保联机房)'); }
+        } else {
+          p2pDead = false; // 中继也没连: 唯一通道是 P2P, 尽力走(不标死避免误判)
+        }
+      }
+      lastStateChannel = p2pDead ? 'relay' : 'p2p';
+    }, 500);
   }
-  function getStateChannel() { return lastStateChannel; }
+  function _stopLiveness() { clearInterval(livenessTimer); livenessTimer = null; }
+  // 有效延迟 = 当前实际承载 gameplay state 的通道往返时延, 由 liveness 监测(p2pDead)决定,
+  // 不再依赖"每帧谁先到"竞态(同序号双发会导致中继副本抢标, 显示恒为 260)
+  function getRtt() {
+    if (p2pDead) return relayRtt > 0 ? relayRtt : (p2pRtt > 0 ? p2pRtt : 0);
+    return p2pRtt > 0 ? p2pRtt : (relayRtt > 0 ? relayRtt : 0);
+  }
+  function getStateChannel() { return p2pDead ? 'relay' : 'p2p'; }
 
   // 序号判定: 只接受比已见更新的消息; 对端刷新页面后序号会从头开始, 差距悬殊时视为新会话
   function _acceptSeq(msg) {
@@ -262,6 +291,8 @@ const Net = (() => {
   // 握手成功统一出口(置位 handshaked, 供中继兜底判定)
   function _emitConnected(payload) {
     handshaked = true;
+    p2pDead = false; p2pHealthyStreak = 0; // 新会话: P2P 视为健康, 启动活性监测
+    _startLiveness();
     // [v129] P2P 一旦真正握上手, 立即并行拉起中继备用通道(双通道冗余):
     // 之前中继只在「20s 未握手」才启动, 导致 P2P 连上后 client→host 控制消息
     // (aipick / rmt / aistart 等) 在 P2P 单向掉线时没有任何兜底, 表现为
@@ -275,7 +306,7 @@ const Net = (() => {
   // 通用消息路由(P2P 与中继共用)
   function _routeMsg(msg, ch) {
     ch = ch || 'p2p';
-    if (msg.t === 'state')       { lastStateChannel = ch; emit('state', msg.s); }
+    if (msg.t === 'state')       { emit('state', msg.s); } // lastStateChannel 由 liveness 监测统一驱动, 见 _startLiveness
     else if (msg.t === 'input')  emit('input', msg.c);
     else if (msg.t === 'bye')    emit('close');
     else if (msg.t === 'reset')  emit('reset');
@@ -306,9 +337,10 @@ const Net = (() => {
     });
     c.on('close', () => {
       lastP2pRecv = 0; // P2P 断开
-      // [P2P 优先·并行备用] 若中继已连(并行备用场景)则静默回落中继; 否则懒启动中继兜底
+      // [P2P 优先·并行备用] 若中继已连(并行备用场景)则立即标死回落中继(由 liveness 维持);
+      // 否则懒启动中继兜底
       if (mqttClient && mqttClient.connected) {
-        mode = 'relay';
+        p2pDead = true; lastStateChannel = 'relay'; mode = 'relay';
         progress('P2P 断开, 自动回落中继备用通道(保联机房)');
         return;
       }
@@ -492,28 +524,26 @@ const Net = (() => {
   // ============ 通用接口 ============
   function send(obj) {
     obj.q = ++sendSeq;
+    const isState = obj.t === 'state';
     const viaP2P = !!(conn && conn.open);
     const viaRelay = !!(mqttClient && mqttClient.connected);
-    // [v122 修复] 双通道冗余发送(原设计意图见 _startRelayBackup 注释"双通道同发同序号"):
-    // 控制消息 P2P 与中继各发一份, 任一侧通道"假死"(发送端 conn.open 但对端已断)也能送达;
-    // 接收端 _acceptSeq 用同序号去重, 不会重复处理。
-    // 仅当"两条都通"时冗余 —— 这正是"非对称断链"场景(host→client 的 state 走活着的通道,
-    // 而 client→host 的 rmt 只走了已死的 P2P 被丢弃)的根因: 表现为对局正常, 但客户端点
-    // "再来一局"主机收不到。状态包(state)只走 P2P, 省中继带宽、保留 v119 中继降码率成果。
-    if (viaP2P && viaRelay) {
-      if (obj.t === 'state') {
-        // [v142 修复] state 也走双通道冗余: P2P 与中继各发一份, 接收端按序号去重(最新帧胜).
-        // 跨网 P2P 卡死/半死时, 中继无缝接管 gameplay state, client 不再冻结;
-        // P2P 存活(更低延迟)时自然胜出, 中继仅作"保联机房"兜底, 不违背 P2P 优先原则.
-        try { conn.send(obj); } catch (e) {}
-        _relaySend(obj);
-      } else {
-        try { conn.send(obj); } catch (e) {}
-        _relaySend(obj);
-      }
+    if (isState) {
+      // [v143 修复] state 单通道发送(不再双发同序号):
+      // P2P 存活且未被 liveness 判死 → 走 P2P(最低延迟, LAN 即 30ms);
+      // 否则走中继兜底(跨网 P2P 半死/断开时真实承载画面, 不再冻结);
+      // 双发同序号会导致中继副本被去重、无法补帧, 且竞态把 RTT 钉死在 260, 已废弃。
+      if (viaP2P && !p2pDead) { try { conn.send(obj); } catch (e) {} return; }
+      if (viaRelay) { _relaySend(obj); return; }
+      if (viaP2P) { try { conn.send(obj); } catch (e) {} } // 中继也没连: 退回 P2P 尽力
       return;
     }
-    // 仅单通道可用时走唯一可用通道
+    // [v122 修复] 控制消息(再来一局/选风格/输入等)双通道冗余: P2P 与中继各发一份,
+    // 任一侧通道"假死"(发送端 conn.open 但对端已断)也能送达; 接收端 _acceptSeq 同序号去重。
+    if (viaP2P && viaRelay) {
+      try { conn.send(obj); } catch (e) {}
+      _relaySend(obj);
+      return;
+    }
     if (viaP2P) { try { conn.send(obj); } catch (e) {} return; }
     if (viaRelay) _relaySend(obj);
   }
@@ -556,7 +586,8 @@ const Net = (() => {
     handshaked = false;
     clearTimeout(connectDeadline); connectDeadline = null;
     sendSeq = 0; lastRecvSeq = 0; lastP2pRecv = 0; rtt = 0; // 新会话重置去重/路由状态
-    _stopPingMonitor();
+    p2pDead = false; p2pHealthyStreak = 0; lastStateChannel = 'p2p';
+    _stopLiveness(); _stopPingMonitor();
   }
 
   return {
