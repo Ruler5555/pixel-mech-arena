@@ -13,39 +13,54 @@
 //   故仅作"能连上但卡"的最后手段, 绝不静默接管。
 
 // ⚠️ 跨网能玩的关键: 必须有一个「活的」TURN 服务器做 NAT 穿透。
-// 默认内置的 openrelay.metered.ca 公共演示服已停服(实测 443/80 均不可达),
-// 会导致跨网 P2P 卡在 TURN 分配超时(~30s)后才失败 → 表现就是"加载半分钟进不去房间"。
-// 解决二选一(填进下面 TURN_SERVERS 即生效, 无需改其它代码):
-//   ① 自托管 coturn: 仓库 deploy/turn/ 已备 docker-compose + 配置 + 说明, 跑在任意有公网 IP 的机器
-//   ② 注册 Metered.ca / Twilio 等 TURN 服务(有免费额度), 拿到你自己的 turn: 地址 + 账号密码填下面
+// v152 起改用 Metered REST API **动态拉取** TURN 凭据(用户账户 zmrly5555):
+//   GET https://zmrly5555.metered.live/api/v1/turn/credentials?apiKey=...
+//   → 返回完整 iceServers 数组(含正确 TURN 主机+用户名+密码, 每次会话都是新鲜的, 不会过期)
+//   这解决了此前硬编码静态凭据可能过期、以及 TURN 主机名靠猜(v150 误填导致 DNS 不存在)的两类问题。
+// 动态拉取失败(网络/CORS)时回退到下方 TURN_SERVERS_FALLBACK(用户 Metered 静态凭据)。
 // 没有可用 TURN 时, 跨网只能走 MQTT 中继(≈500ms, 见 switchToRelay)——这是目前唯一跨网通道。
-const TURN_SERVERS = [
-  // Metered.ca 用户专属 TURN(跨网 NAT 穿透, 真·P2P, 延迟远低于 MQTT 中继)
-  // 凭据由用户账户提供, 可随时在 Metered 后台 Revoke 重置(仓库公开, 此为其固有可见性)
-  // ⚠️ 端口优先级(国内防火墙现实): 443(TLS) > 80 > 3478
-  //   - 3478(udp/tcp) 跨境常被干扰导致 TURN 分配失败 → 对称 NAT 连不上("加不进房间")
-  //   - 443 是 HTTPS 端口几乎必通, turns:(TLS) 跨境穿透最稳 → 提最高优先级
-  // 主机名 global.turn.server.at 经 DNS 实测可解析(v150 误改成 <APP_ID>.turn.metered.ca 导致 DNS 不存在, 已回退)
+const METERED_TURN_API = 'https://zmrly5555.metered.live/api/v1/turn/credentials?apiKey=5dda66de41e9bb5aa384ffa0da11cf947eab';
+const TURN_SERVERS_FALLBACK = [
+  // 静态兜底(REST API 不可达时): 此前用户提供的 Metered 静态凭据
+  // 主机名 global.turn.server.at 经 DNS 实测可解析; 443(TLS) 跨境穿透最稳
   { urls: 'turns:global.turn.server.at:443?transport=tcp', username: '425449aea566e68b32d835d0', credential: 'GUKibG6xmWU+XF+t' },
   { urls: 'turn:global.turn.server.at:443?transport=tcp', username: '425449aea566e68b32d835d0', credential: 'GUKibG6xmWU+XF+t' },
   { urls: 'turn:global.turn.server.at:3478?transport=tcp', username: '425449aea566e68b32d835d0', credential: 'GUKibG6xmWU+XF+t' },
   { urls: 'turn:global.turn.server.at:3478', username: '425449aea566e68b32d835d0', credential: 'GUKibG6xmWU+XF+t' }
 ];
-const ICE_SERVERS = {
-  iceServers: [
-    { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' },
-    { urls: 'stun:stun2.l.google.com:19302' },
-    { urls: 'stun:stun3.l.google.com:19302' },
-    { urls: 'stun:stun4.l.google.com:19302' },
-    { urls: 'stun:global.stun.twilio.com:3478' },
-    { urls: 'stun:stun.qq.com:3478' },
-    { urls: 'stun:stun.miwifi.com:3478' },
-    ...TURN_SERVERS
-  ],
-  // 提高穿透概率
-  iceTransportPolicy: 'all'
-};
+const STUN_SERVERS = [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:stun1.l.google.com:19302' },
+  { urls: 'stun:stun2.l.google.com:19302' },
+  { urls: 'stun:stun3.l.google.com:19302' },
+  { urls: 'stun:stun4.l.google.com:19302' },
+  { urls: 'stun:global.stun.twilio.com:3478' },
+  { urls: 'stun:stun.qq.com:3478' },
+  { urls: 'stun:stun.miwifi.com:3478' }
+];
+
+// 动态构建 ICE 配置: 优先用 Metered REST API 返回的实时 TURN(主机/凭据都由 Metered 给, 不靠猜), 失败回退静态
+// 返回 Promise<{iceServers, iceTransportPolicy}>, 始终 resolve(不会阻塞连接)
+function buildIceServers() {
+  return new Promise((resolve) => {
+    let done = false;
+    const ok = (ice) => { if (done) return; done = true; resolve(ice); };
+    const fallback = () => ok({ iceServers: [...STUN_SERVERS, ...TURN_SERVERS_FALLBACK], iceTransportPolicy: 'all' });
+    try {
+      fetch(METERED_TURN_API, { cache: 'no-store' })
+        .then((r) => r.json())
+        .then((servers) => {
+          const arr = Array.isArray(servers) ? servers : [];
+          const turn = arr.filter((s) => s && /turn:/.test(s.urls || ''));
+          progress('TURN 服务已获取(' + turn.length + '条)');
+          ok({ iceServers: [...STUN_SERVERS, ...arr], iceTransportPolicy: 'all' });
+        })
+        .catch(() => { progress('TURN 动态获取失败, 用静态兜底'); fallback(); });
+    } catch (e) { fallback(); }
+    // 兜底超时: 若 API 卡死(无网络), 5s 后用静态兜底, 不阻塞连接
+    setTimeout(() => { if (!done) { progress('TURN 获取超时, 用静态兜底'); fallback(); } }, 5000);
+  });
+}
 
 const PEER_PREFIX = 'pma26-';
 
@@ -104,13 +119,14 @@ const Net = (() => {
     return new Promise((resolve, reject) => {
       role = 'host'; roomCode = genCode(); handshaked = false; mode = 'p2p';
       joining = false; relayOffered = false;
-      progress('正在连接信令服务器...');
+      progress('正在获取 TURN 穿透服务...');
+      buildIceServers().then((ice) => {
       let resolved = false;
       const finish = (code) => {
         if (resolved) return;
         resolved = true; _startKeepAlive(); resolve(code);
       };
-      try { peer = new Peer(PEER_PREFIX + roomCode, { debug: 1, config: ICE_SERVERS }); }
+      try { peer = new Peer(PEER_PREFIX + roomCode, { debug: 1, config: ice }); }
       catch (e) { reject(e); return; }
 
       peer.on('open', () => {
@@ -140,6 +156,7 @@ const Net = (() => {
         }
         progress('信令错误: ' + err.type);
       });
+      }).catch((e) => reject(e));
     });
   }
 
@@ -149,27 +166,29 @@ const Net = (() => {
     return new Promise((resolve, reject) => {
       role = 'client'; roomCode = code; handshaked = false; mode = 'p2p';
       joining = true; relayOffered = false; p2pConnectAttempts = 0;
-      progress('正在连接信令服务器...');
+      progress('正在获取 TURN 穿透服务...');
       _joinResolve = (c) => { resolve(c); };
       _joinReject = (e) => { reject(e); };
       // 安全网: 8s 内信令/首连都没成 → 提供中继选项(不静默接管)
       setTimeout(() => { if (!handshaked && !relayOffered) offerRelay(); }, 8000);
-      try { peer = new Peer({ debug: 1, config: ICE_SERVERS }); }
-      catch (e) { reject(e); return; }
+      buildIceServers().then((ice) => {
+        try { peer = new Peer({ debug: 1, config: ice }); }
+        catch (e) { reject(e); return; }
 
-      peer.on('open', () => {
-        progress('信令已就绪, 正在尝试 P2P 直连...');
-        _tryP2pConnect();
-        _startRelayListen(code); // 预订阅中继: 用户点「切换中继」可秒连
-      });
+        peer.on('open', () => {
+          progress('信令已就绪, 正在尝试 P2P 直连...');
+          _tryP2pConnect();
+          _startRelayListen(code); // 预订阅中继: 用户点「切换中继」可秒连
+        });
 
-      peer.on('disconnected', () => { progress('信令断开, 重连中...'); try { peer.reconnect(); } catch (e) {} });
+        peer.on('disconnected', () => { progress('信令断开, 重连中...'); try { peer.reconnect(); } catch (e) {} });
 
-      peer.on('error', (err) => {
-        // peer-unavailable 多为瞬态(主机信令尚未就绪), 重试由 _tryP2pConnect 的超时驱动
-        if (err.type === 'peer-unavailable') { progress('主机暂时不可达, 重试 P2P...'); return; }
-        progress('信令错误: ' + err.type);
-      });
+        peer.on('error', (err) => {
+          // peer-unavailable 多为瞬态(主机信令尚未就绪), 重试由 _tryP2pConnect 的超时驱动
+          if (err.type === 'peer-unavailable') { progress('主机暂时不可达, 重试 P2P...'); return; }
+          progress('信令错误: ' + err.type);
+        });
+      }).catch((e) => reject(e));
     });
   }
   // P2P 无限重试: 每次间隔 P2P_RETRY_GAP, 永不放弃(用户可手动点「切换中继」或「返回大厅」)
