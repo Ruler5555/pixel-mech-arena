@@ -91,6 +91,7 @@
   const ovText = document.getElementById('overlayText');
   const startBtn = document.getElementById('startBtn');
   const cancelBtn = document.getElementById('cancelBtn');
+  const relayBtn = document.getElementById('relayBtn');
   const modeTag = document.getElementById('gameModeTag');
 
   let exitConfirmMode = false;
@@ -515,6 +516,7 @@
   function showOverlay(title, text, btn, opts) {
     opts = opts || {};
     overlay.classList.remove('hidden');
+    if (relayBtn) relayBtn.classList.add('hidden');
     ovTitle.textContent = title;
     ovText.textContent = text || '';
     startBtn.textContent = btn || '开始';
@@ -522,7 +524,22 @@
     cancelBtn.classList.toggle('hidden', !opts.cancelable);
     cancelBtn.textContent = opts.cancelLabel || '返回大厅';
   }
-  function hideOverlay() { overlay.classList.add('hidden'); }
+  function hideOverlay() {
+    overlay.classList.add('hidden');
+    if (relayBtn) { relayBtn.classList.add('hidden'); relayBtn.onclick = null; }
+  }
+  // 网络选择弹层: 提示中继高延迟, 提供「切换中继」与「返回大厅」(显式兜底, 不静默接管)
+  function showNetChoice(title, msg, onRelay, onCancelChoice) {
+    showOverlay(title, msg, '', { cancelable: true, cancelLabel: '返回大厅' });
+    relayBtn.classList.remove('hidden');
+    relayBtn.textContent = '切换中继 (高延迟)';
+    relayBtn.onclick = () => { relayBtn.onclick = null; relayBtn.classList.add('hidden'); onRelay(); };
+    pendingNetAbort = () => {
+      relayBtn.onclick = null; relayBtn.classList.add('hidden');
+      pendingNetAbort = null;
+      if (onCancelChoice) onCancelChoice();
+    };
+  }
 
   function backToLobby() {
     resetRematchState();
@@ -856,6 +873,7 @@
   // 返回大厅/取消(只绑 click)
   const onCancel = (e) => {
     e.preventDefault();
+    if (pendingNetAbort) { const f = pendingNetAbort; pendingNetAbort = null; f(); return; }
     if (exitConfirmMode) {
       exitConfirmMode = false;
       hideOverlay();
@@ -905,24 +923,14 @@
 
   // ===== 联机事件绑定 =====
   let netBound = false;
-  let reconnectDeadline = null;
-  let reconnecting = false;
-  function clearReconnect() {
-    if (reconnectDeadline) { clearTimeout(reconnectDeadline); reconnectDeadline = null; }
-    reconnecting = false;
-  }
+  let pendingNetAbort = null;
   function bindNetEvents() {
     if (netBound) return;
     netBound = true;
     Net.on('connected', (data) => {
       // data.name 是对方发来的名字
       const oppName = (data && data.name) ? data.name : '对手';
-      if (reconnecting) {
-        clearReconnect();
-        hideOverlay();
-        if (game.mode === 'host' && game.running) { game.resetMatch(); game.start(); }
-        return;
-      }
+      hideOverlay(); // 清除「连接断开/重连中」等遮罩, 确保主机界面必定刷新(修 v143 主机不刷新 bug)
       // host: 对手已加入, 显示开始按钮
       if (myRole === 'host') {
         // AI 对战房: 先告知 client 房间玩法(client 仅更新等待提示, 真正进选风格屏要等 host 点「进入选风格」)
@@ -1007,16 +1015,34 @@
       const lines = cur.split('\n').filter(l => !l.startsWith('['));
       ovText.textContent = lines.join('\n') + '\n[' + msg + ']';
     });
+    // 对方主动离开(bye) → 回大厅
     Net.on('close', () => {
-      if (reconnecting) return;
-      reconnecting = true;
+      if (game.mode === 'offline') return;
+      hideOverlay();
+      Net.close();
+      backToLobby();
+      setStatus('对手已离开');
+    });
+    // 通道意外断开(P2P 掉线等): 不再静默翻 mode, 弹「连接断开」让用户手动决策
+    Net.on('disconnected', () => {
+      if (game.mode === 'offline') return;
       exitConfirmMode = false;
-      showOverlay('重连中', '网络短暂中断,正在自动恢复...\n\n若 6 秒内未恢复请返回大厅', '',
-        { cancelable: true, cancelLabel: '返回大厅' });
-      reconnectDeadline = setTimeout(() => {
-        showOverlay('连接断开', '对手已离开或网络持续中断\n\n点下方返回大厅', '',
-          { cancelable: true, cancelLabel: '返回大厅' });
-      }, 6000);
+      showNetChoice('连接断开', '与对手的连接中断了。\n\n可切换中继通道继续(延迟≈500ms, 对战将严重卡顿、几乎不可玩); 或直接返回大厅。',
+        () => {
+          Net.switchToRelay();
+          showOverlay('切换中', '正在通过中继通道恢复连接...', '', { cancelable: true, cancelLabel: '返回大厅' });
+        },
+        () => { hideOverlay(); Net.close(); backToLobby(); });
+    });
+    // 连接阶段 P2P 连不上: 自动重试耗尽后弹出「切换中继(高延迟)」按钮(显式兜底)
+    Net.on('relayOffered', () => {
+      if (game.mode === 'offline') return;
+      showNetChoice('P2P 直连失败', '无法与主机建立直连(P2P)。\n\n可切换中继通道(延迟≈500ms, 对战将严重卡顿、几乎不可玩); 或返回大厅。建议确认双方在同一网络/可直连。',
+        () => {
+          Net.switchToRelay();
+          showOverlay('切换中', '正在通过中继通道连接...', '', { cancelable: true, cancelLabel: '返回大厅' });
+        },
+        () => { hideOverlay(); Net.abortJoin(); Net.close(); });
     });
     Net.on('error', () => { setStatus('网络错误,请重试', true); });
 
@@ -1042,6 +1068,10 @@
   // ===== 更新公告: 点击版本号显示近三次更新(倒序: 最新在前; 每条用短句概括改动, 一点一换行; 每次发版须 prepend 一条真实版本) =====
   // 文案规则: 每条不超过 30 字, 一条一个圆点, 折行不再出点(见 .cl-pt 悬挂缩进)
   const CHANGELOG = [
+    ['v145', [
+      '联机改P2P一次决策, 删每帧回落(根治常驻260/双发)',
+      'P2P失败自动重试+弹「切换中继(高延迟)」显式兜底'
+    ]],
     ['v143', [
       '修 v142 回退: 延迟常驻260与频繁连接中断',
       'state 改单通道+ P2P 死亡探测回落中继'
