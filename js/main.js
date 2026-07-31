@@ -112,7 +112,7 @@
   // (这正是「客户端始终进不去选风格屏」的根因)。
   let myRole = null;         // 'host' | 'client' | null
 
-  function pct(hp) { return Math.max(0, Math.min(100, hp)) + '%'; }
+  function pct(hp, max) { return Math.max(0, Math.min(100, (hp / (max || 100)) * 100)) + '%'; } // [v141] 按 maxHP 比例, 适配 AI 对战 120 血上限
   function fmtWins(w) {
     return '<span class="' + (w > 0 ? 'got' : '') + '">●</span> <span class="' + (w > 1 ? 'got' : '') + '">●</span>';
   }
@@ -127,8 +127,8 @@
 
   function updateHUD() {
     if (!game.p1 || !game.p2) return; // [BUG-FIX] 比赛开始前 p1/p2 为 null, 跳过避免每帧 TypeError
-    elHpP1.style.width = pct(game.p1.hp);
-    elHpP2.style.width = pct(game.p2.hp);
+    elHpP1.style.width = pct(game.p1.hp, game.p1.maxHP);
+    elHpP2.style.width = pct(game.p2.hp, game.p2.maxHP);
     // 血条下方 HP 数字: 四舍五入只保留整数(内部 HP 可为小数, 受击时显示整数)
     const hpNum1 = Math.round(game.p1.hp);
     const hpNum2 = Math.round(game.p2.hp);
@@ -1042,6 +1042,10 @@
   // ===== 更新公告: 点击版本号显示近三次更新(倒序: 最新在前; 每条用短句概括改动, 一点一换行; 每次发版须 prepend 一条真实版本) =====
   // 文案规则: 每条不超过 30 字, 一条一个圆点, 折行不再出点(见 .cl-pt 悬挂缩进)
   const CHANGELOG = [
+    ['v141', [
+      '联机AI对战血量上限升至120',
+      '联机AI对战每回合缩短为30秒'
+    ]],
     ['v139', [
       '联机结算新增返回大厅退出键',
       '右上退出键在结算弹层上可正常点',

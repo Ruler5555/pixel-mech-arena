@@ -184,7 +184,9 @@ class Game {
     this.round = 1;
     this.winsP1 = 0;
     this.winsP2 = 0;
-    this.timer = 60;
+    this.maxHP = 100;      // [v141] 血量上限(默认 100; 联机 AI 对战模式 120)
+    this.roundTime = 60;   // [v141] 每回合时长(s, 默认 60; 联机 AI 对战模式 30)
+    this.timer = this.roundTime;
     this.timerAcc = 0;
     this.roundWinner = 0;
 
@@ -225,6 +227,14 @@ class Game {
   setMode(mode) {
     this.mode = mode;
     this.localPlayer = (mode === MODES.CLIENT || mode === MODES.AI_CLIENT) ? 2 : 1;
+    // [v141] 联机 AI 对战模式专属数值: 血量上限 120、每回合 30s; 其余模式维持 100/60
+    if (mode === MODES.AI_HOST || mode === MODES.AI_CLIENT) {
+      this.maxHP = 120;
+      this.roundTime = 30;
+    } else {
+      this.maxHP = 100;
+      this.roundTime = 60;
+    }
   }
 
   // 设置 AI 对战模式的双方机甲 AI 风格(id 对应 AI_PRESETS)
@@ -234,8 +244,8 @@ class Game {
   }
 
   _resetMechs() {
-    this.p1 = new Mech({ x: 180, groundY: this.groundY, facing: 1, color: 'blue', name: 'BLUE-01' });
-    this.p2 = new Mech({ x: 460, groundY: this.groundY, facing: -1, color: 'red', name: 'RED-X' });
+    this.p1 = new Mech({ x: 180, groundY: this.groundY, facing: 1, color: 'blue', name: 'BLUE-01', maxHP: this.maxHP });
+    this.p2 = new Mech({ x: 460, groundY: this.groundY, facing: -1, color: 'red', name: 'RED-X', maxHP: this.maxHP });
     this.ai = makeAI();
     this.ai1 = makeAI(this.aiPresetP1 || AI_PRESETS.balanced);
     this.ai2 = makeAI(this.aiPresetP2 || AI_PRESETS.balanced);
@@ -254,7 +264,7 @@ class Game {
     this._resetMechs();
     this.interp.buffer.length = 0;
     this.interp.prevFoeHp = undefined;
-    this.timer = 60;
+    this.timer = this.roundTime;
     this.timerAcc = 0;
     this.particles = [];
     this.shake = 0;

@@ -20,8 +20,8 @@ class Mech {
     this.name = opts.name;
     this.color = opts.color;
 
-    this.maxHP = 100;
-    this.hp = 100;
+    this.maxHP = opts.maxHP || 100; // [v141] 联机 AI 对战模式由 Game 传入 120, 其余模式默认 100
+    this.hp = this.maxHP;
 
     // 物理
     this.vx = 0;

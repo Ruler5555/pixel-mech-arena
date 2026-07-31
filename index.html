@@ -15,7 +15,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" media="print" onload="this.media='all'">
 <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap"></noscript>
-<link rel="stylesheet" href="css/style.css?v=139">
+<link rel="stylesheet" href="css/style.css?v=141">
 </head>
 <body>
 <div id="app">
@@ -23,7 +23,7 @@
   <!-- ===== 全局常驻边缘: 规则 + 版本号(所有界面可见, 不滚动即可见) ===== -->
   <div id="persistEdge">
     <button id="rulesBtn" class="edge-btn" aria-label="游戏规则">规则?</button>
-    <span id="versionTag" class="version-tag">v139</span>
+    <span id="versionTag" class="version-tag">v141</span>
   </div>
 
   <!-- ===== 登录界面 ===== -->
@@ -300,8 +300,8 @@
     <div class="info-card">
       <div class="info-title">游戏规则</div>
       <div class="info-body">
-        <p>· 三局两胜(BO3),每回合 60 秒,时间到比血量,高者胜;同血平局</p>
-        <p>· 血量上限 100,显示在各自血条下方,受击后实时更新</p>
+        <p>· 三局两胜(BO3),每回合 60 秒(联机 AI 对战为 30 秒),时间到比血量,高者胜;同血平局</p>
+        <p>· 血量上限 100(联机 AI 对战为 120),显示在各自血条下方,受击后实时更新</p>
         <p>· 轻击:伤害 8,出手快后摇短;重击:伤害 18,出手慢,破防惩罚强</p>
         <p>· 防御:减伤 80% 并反弹 50% 伤害给攻击者,但防御时不能移动</p>
         <p>· 二段跳可空中走位,但空中不能攻击</p>
@@ -331,16 +331,16 @@
 </div>
 
 <!-- 所有脚本加 defer: 并行下载、按序执行、不阻塞首屏 DOM 解析; 加快首屏可点 -->
-<script defer src="vendor/peerjs.min.js?v=139"></script>
-<script defer src="vendor/mqtt.min.js?v=139"></script>
-<script defer src="js/auth.js?v=139"></script>
-<script defer src="js/world.js?v=139"></script>
-<script defer src="js/input.js?v=139"></script>
-<script defer src="js/touch.js?v=139"></script>
-<script defer src="js/sprite.js?v=139"></script>
-<script defer src="js/player.js?v=139"></script>
-<script defer src="js/net.js?v=139"></script>
-<script defer src="js/game.js?v=139"></script>
-<script defer src="js/main.js?v=139"></script>
+<script defer src="vendor/peerjs.min.js?v=141"></script>
+<script defer src="vendor/mqtt.min.js?v=141"></script>
+<script defer src="js/auth.js?v=141"></script>
+<script defer src="js/world.js?v=141"></script>
+<script defer src="js/input.js?v=141"></script>
+<script defer src="js/touch.js?v=141"></script>
+<script defer src="js/sprite.js?v=141"></script>
+<script defer src="js/player.js?v=141"></script>
+<script defer src="js/net.js?v=141"></script>
+<script defer src="js/game.js?v=141"></script>
+<script defer src="js/main.js?v=141"></script>
 </body>
 </html>
