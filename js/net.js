@@ -43,31 +43,44 @@ const STUN_SERVERS = [
   { urls: 'stun:stun.miwifi.com:3478' }
 ];
 
+// ===== 连接诊断(v156): 状态栏实时显示 TURN/ICE/候选, 便于定位跨网连不上卡点 =====
+let _netDiag = { turn: '?', ice: 'idle', host: 0, srflx: 0, relay: 0, cands: 0 };
+function netDiagReset() { _netDiag = { turn: '?', ice: 'idle', host: 0, srflx: 0, relay: 0, cands: 0 }; }
+function netDiagSummary() {
+  const d = _netDiag;
+  return ' | TURN:' + d.turn + ' ICE:' + d.ice + ' 候选[本机' + d.host + ' 公网' + d.srflx + ' 中继' + d.relay + ']';
+}
+
 // 动态构建 ICE 配置: 优先用 Metered REST API 返回的实时 TURN(主机/凭据都由 Metered 给, 不靠猜), 失败回退静态
 // 返回 Promise<{iceServers, iceTransportPolicy}>, 始终 resolve(不会阻塞连接)
 function buildIceServers() {
   return new Promise((resolve) => {
     let done = false;
     const ok = (ice) => { if (done) return; done = true; resolve(ice); };
-    const fallback = () => ok({ iceServers: [...STUN_SERVERS, ...TURN_SERVERS_FALLBACK], iceTransportPolicy: 'all' });
+    const fallback = () => {
+      _netDiag.turn = '静态兜底';
+      ok({ iceServers: [...STUN_SERVERS, ...TURN_SERVERS_FALLBACK], iceTransportPolicy: 'all' });
+    };
     try {
       fetch(METERED_TURN_API, { cache: 'no-store' })
         .then((r) => r.json())
         .then((servers) => {
           // Metered 在 key 无效/无权限时返回 {error:...} 而非数组 → 立即回退静态, 不卡死
           if (!servers || servers.error || !Array.isArray(servers) || servers.length === 0) {
+            _netDiag.turn = '动态失败→静态';
             console.log('[TURN] 动态获取失败(无有效凭据), 用静态兜底');
             fallback();
             return;
           }
           const turn = servers.filter((s) => s && /turn:/.test(s.urls || ''));
+          _netDiag.turn = '动态' + turn.length + '条';
           console.log('[TURN] 服务已获取(' + turn.length + '条)');
           ok({ iceServers: [...STUN_SERVERS, ...servers], iceTransportPolicy: 'all' });
         })
-        .catch(() => { console.log('[TURN] 动态获取失败, 用静态兜底'); fallback(); });
-    } catch (e) { fallback(); }
+        .catch(() => { _netDiag.turn = '动态失败→静态'; console.log('[TURN] 动态获取失败, 用静态兜底'); fallback(); });
+    } catch (e) { _netDiag.turn = '异常→静态'; fallback(); }
     // 兜底超时: 若 API 卡死(无网络), 5s 后用静态兜底, 不阻塞连接
-    setTimeout(() => { if (!done) { console.log('[TURN] 获取超时, 用静态兜底'); fallback(); } }, 5000);
+    setTimeout(() => { if (!done) { _netDiag.turn = '超时→静态'; console.log('[TURN] 获取超时, 用静态兜底'); fallback(); } }, 5000);
   });
 }
 
@@ -106,6 +119,30 @@ const Net = (() => {
   function on(ev, fn) { (handlers[ev] || []).push(fn); }
   function emit(ev, arg) { (handlers[ev] || []).forEach(fn => { try { fn(arg); } catch (e) {} }); }
   function progress(msg) { emit('progress', msg); }
+  // 带连接诊断的进度消息(P2P 阶段用, 状态栏可见 TURN/ICE/候选统计)
+  function _p2pProgress(msg) { progress(msg + netDiagSummary()); }
+  // 监听底层 RTCPeerConnection 的 ICE 候选与状态(诊断用)
+  function _watchIce(c) {
+    try {
+      const pc = c._pc || c.peerConnection;
+      if (!pc) return;
+      pc.addEventListener('icecandidate', (ev) => {
+        if (ev.candidate) {
+          _netDiag.cands++;
+          const s = ev.candidate.candidate || '';
+          if (s.includes('typ host')) _netDiag.host++;
+          else if (s.includes('typ srflx')) _netDiag.srflx++;
+          else if (s.includes('typ relay')) _netDiag.relay++;
+        }
+      });
+      pc.addEventListener('iceconnectionstatechange', () => {
+        _netDiag.ice = pc.iceConnectionState || '?';
+        if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'disconnected') {
+          progress('NAT 穿透失败, 需 TURN/中继' + netDiagSummary());
+        }
+      });
+    } catch (e) {}
+  }
   function setName(n) { playerName = n || ''; }
   function genCode() { return String(Math.floor(100000 + Math.random() * 900000)); }
 
@@ -128,7 +165,7 @@ const Net = (() => {
     return new Promise((resolve, reject) => {
       role = 'host'; roomCode = genCode(); handshaked = false; mode = 'p2p';
       joining = false; relayOffered = false;
-      progress('正在获取 TURN 穿透服务...');
+      progress('正在获取 TURN 穿透服务...' + netDiagSummary());
       buildIceServers().then((ice) => {
       let resolved = false;
       const finish = (code) => {
@@ -139,7 +176,7 @@ const Net = (() => {
       catch (e) { reject(e); return; }
 
       peer.on('open', () => {
-        progress('信令已就绪, 等待对手(P2P 直连优先)...');
+        progress('信令已就绪, 等待对手(P2P 直连优先)...' + netDiagSummary());
         finish(roomCode);
         // 主机同时监听中继通道(仅订阅, 不主动用): client 点「切换中继」可立即连上,
         // 中继延迟尖刺只在 client 真正走中继时才出现, 不影响 P2P 手感
@@ -149,7 +186,7 @@ const Net = (() => {
       peer.on('connection', (c) => {
         if (conn && conn.open && conn !== c) { c.close(); return; } // 已有直连, 丢弃重复
         conn = c; mode = 'p2p';
-        progress('P2P 直连已建立');
+        _p2pProgress('P2P 直连已建立');
         bindConn(c);
       });
 
@@ -175,7 +212,7 @@ const Net = (() => {
     return new Promise((resolve, reject) => {
       role = 'client'; roomCode = code; handshaked = false; mode = 'p2p';
       joining = true; relayOffered = false; p2pConnectAttempts = 0;
-      progress('正在获取 TURN 穿透服务...');
+      progress('正在获取 TURN 穿透服务...' + netDiagSummary());
       _joinResolve = (c) => { resolve(c); };
       _joinReject = (e) => { reject(e); };
       // 安全网: 8s 内信令/首连都没成 → 提供中继选项(不静默接管)
@@ -185,7 +222,7 @@ const Net = (() => {
         catch (e) { reject(e); return; }
 
         peer.on('open', () => {
-          progress('信令已就绪, 正在尝试 P2P 直连...');
+          progress('信令已就绪, 正在尝试 P2P 直连...' + netDiagSummary());
           _tryP2pConnect();
           _startRelayListen(code); // 预订阅中继: 用户点「切换中继」可秒连
         });
@@ -205,7 +242,7 @@ const Net = (() => {
     if (handshaked) return;
     if (!peer || peer.destroyed) return;
     p2pConnectAttempts++;
-    progress('P2P 直连尝试 ' + p2pConnectAttempts + ' 次...');
+    _p2pProgress('P2P 直连尝试 ' + p2pConnectAttempts + ' 次...');
     const c = peer.connect(PEER_PREFIX + roomCode, { reliable: true, serialization: 'json' });
     conn = c; bindConn(c);
     p2pRetryTimer = setTimeout(() => {
@@ -290,14 +327,15 @@ const Net = (() => {
   }
 
   function bindConn(c) {
+    _watchIce(c);  // v156: 统计 ICE 候选类型/状态(诊断)
     c.on('open', () => {
-      progress('P2P 已建立');
+      _p2pProgress('P2P 已建立');
       _startPingMonitor();
       try { c.send({ t: 'hello', n: playerName, q: ++sendSeq }); } catch (e) {}
     });
     // ICE 状态诊断: 跨网连不上时据此判断是 NAT 穿透失败还是 TURN 不可用
     if (c.on) {
-      try { c.on('iceStateChanged', (s) => { if (s === 'failed' || s === 'disconnected') progress('NAT 穿透失败, 需 TURN/中继'); else progress('网络状态: ' + s); }); } catch (e) {}
+      try { c.on('iceStateChanged', (s) => { if (s === 'failed' || s === 'disconnected') progress('NAT 穿透失败, 需 TURN/中继' + netDiagSummary()); else progress('网络状态: ' + s + netDiagSummary()); }); } catch (e) {}
     }
     c.on('data', (msg) => {
       if (!msg || !msg.t) return;
