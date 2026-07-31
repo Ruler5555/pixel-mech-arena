@@ -699,7 +699,24 @@ button:active:not(:disabled) { transform: translateY(2px); }
   padding: 28px 24px;
   text-align: center;
 }
-.room-title { font-size: 14px; color: var(--blue); text-shadow: 2px 2px 0 var(--border); letter-spacing: 2px; margin-bottom: 16px; }
+.room-title { font-size: 14px; color: var(--blue); text-shadow: 2px 2px 0 var(--border); letter-spacing: 2px; margin-bottom: 10px; }
+/* 房间玩法标识: 创建后一眼看清自己开的是 1v1 还是 AI 对战 */
+.room-mode-tag {
+  display: inline-block;
+  font-size: 7px;
+  letter-spacing: 1px;
+  color: var(--blue);
+  background: rgba(93, 168, 255, 0.10);
+  border: 2px solid rgba(93, 168, 255, 0.35);
+  border-radius: 8px;
+  padding: 6px 10px;
+  margin-bottom: 14px;
+}
+.room-mode-tag.ai {
+  color: var(--gold);
+  background: rgba(255, 210, 63, 0.10);
+  border-color: rgba(255, 210, 63, 0.35);
+}
 .room-code-display { margin-bottom: 20px; }
 .room-code-label { font-size: 7px; color: var(--dim); letter-spacing: 2px; margin-bottom: 8px; }
 .room-code {

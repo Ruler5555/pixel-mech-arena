@@ -39,6 +39,7 @@
   // ===== DOM: 房间等待大厅 =====
   const roomLobby = document.getElementById('roomLobby');
   const roomLobbyCode = document.getElementById('roomLobbyCode');
+  const roomModeTag = document.getElementById('roomModeTag');
   const slotP1Name = document.getElementById('slotP1Name');
   const slotP2Name = document.getElementById('slotP2Name');
   const slotP2Status = document.getElementById('slotP2Status');
@@ -97,6 +98,8 @@
   let hostPickId = null;     // host 自己选的机甲 AI 风格
   let clientPickId = null;   // client 选的机甲 AI 风格(host 侧收集)
   let aiLocalPickId = null;  // 当前玩家(无论 host/client)选的风格
+  let currentRoomCode = '';  // 当前房号(选风格屏返回等待大厅时需要)
+  let peerName = '';         // 对手昵称(从选风格屏返回等待大厅时恢复 slot 显示)
 
   function pct(hp) { return Math.max(0, Math.min(100, hp)) + '%'; }
   function fmtWins(w) {
@@ -365,7 +368,10 @@
   }
 
   // ===== 房间等待大厅 =====
-  function showRoomLobby(code) {
+  // opts.keepState=true 时不重置对手槽位/分享状态(用于从选风格屏返回, 此时连接与对手都还在)
+  function showRoomLobby(code, opts) {
+    opts = opts || {};
+    currentRoomCode = code;
     lobby.classList.add('hidden');
     gameWrap.classList.add('hidden');
     onlineHub.classList.add('hidden');
@@ -376,6 +382,18 @@
     leaveGame();
     roomLobbyCode.textContent = code;
     slotP1Name.textContent = currentPlayer ? currentPlayer.name : '玩家';
+    // 等待大厅标明本房玩法, 避免创建后不知道自己开的是哪种房
+    if (roomModeTag) {
+      roomModeTag.textContent = roomMode === 'ai' ? '🤖 AI 对战 · 观战 BO3' : '⚔️ 双人对战 · 1v1';
+      roomModeTag.className = 'room-mode-tag' + (roomMode === 'ai' ? ' ai' : '');
+    }
+    // 开始键文案: AI 对战房点了先进选风格屏, 而不是直接开打
+    btnRoomStart.textContent = roomMode === 'ai' ? '进入选风格' : '开始对战';
+    if (opts.keepState) {
+      // 从选风格屏返回: 对手仍在房内, 恢复"已就绪"并保留开始键
+      markPeerJoined(peerName || '对手');
+      return;
+    }
     slotP2Name.innerHTML = '等待中' + loadingDots();
     slotP2Status.textContent = '等待加入';
     slotP2Status.className = 'slot-status';
@@ -383,6 +401,18 @@
     sharedToWorld = false;
     btnShareWorld.classList.remove('shared');
     btnShareWorld.textContent = '分享到世界';
+  }
+  // 对手加入后的等待大厅状态(connected 事件与"从选风格屏返回"共用)
+  function markPeerJoined(oppName) {
+    peerName = oppName;
+    slotP2Name.textContent = oppName;
+    slotP2Status.textContent = '已就绪';
+    slotP2Status.className = 'slot-status ready';
+    btnRoomStart.classList.remove('hidden');
+    roomLobbyStatus.textContent = roomMode === 'ai'
+      ? '对手 ' + oppName + ' 已加入! 点击进入选风格'
+      : '对手 ' + oppName + ' 已加入! 点击开始对战';
+    hudP2Name.textContent = oppName;
   }
   function hideRoomLobby() {
     roomLobby.classList.add('hidden');
@@ -417,12 +447,21 @@
 
   // 房间开始/取消
   btnRoomStart.addEventListener('click', () => {
+    // AI 对战房: 这一步不是开打, 而是双方一起进选风格屏
+    if (roomMode === 'ai') {
+      hostPickId = null; clientPickId = null;
+      Net.sendAiPickStart();
+      showAIPickScreen();
+      return;
+    }
     Net.sendStart(); // 通知 client 开始
     showGame();
     game.resetMatch();
     game.start();
   });
   btnRoomCancel.addEventListener('click', () => {
+    roomMode = 'pvp'; // 复位玩法, 否则下次开 PvP 房仍显示 AI 标签
+    hostPickId = null; clientPickId = null; aiLocalPickId = null;
     hideRoomLobby();
     btnShareWorld.textContent = '分享到世界'; // 离开房间后, 下次分享重新从"分享到世界"开始
     btnShareWorld.classList.remove('shared');
@@ -462,6 +501,8 @@
 
   function backToLobby() {
     resetRematchState();
+    roomMode = 'pvp'; // 复位玩法与 AI 选择, 防止状态泄漏到下一个房间
+    hostPickId = null; clientPickId = null; aiLocalPickId = null;
     exitConfirmMode = false; // 复位, 防止退出确认状态泄漏导致退出键失效
     game.stop();
     Net.close();
@@ -646,6 +687,7 @@
   if (btnOnlineModeBack) btnOnlineModeBack.addEventListener('click', () => { showOnlineHub(); });
   if (btnOnlineModePvP) btnOnlineModePvP.addEventListener('click', () => {
     btnOnlineModePvP.disabled = true;
+    roomMode = 'pvp';
     startHost('pvp').finally(() => { btnOnlineModePvP.disabled = false; });
   });
   if (btnOnlineModeAIvAI) btnOnlineModeAIvAI.addEventListener('click', () => {
@@ -654,6 +696,15 @@
     startHost('ai').finally(() => { btnOnlineModeAIvAI.disabled = false; });
   });
   if (btnAIPickBack) btnAIPickBack.addEventListener('click', () => {
+    // host: 返回 = 退回等待大厅(房间与连接都保留, 可以反悔重选), 并通知 client 一起退回等待
+    if (game.mode === 'host' && Net.isConnected()) {
+      hostPickId = null; clientPickId = null; aiLocalPickId = null;
+      Net.sendAiCancel();
+      showRoomLobby(currentRoomCode, { keepState: true });
+      roomLobbyStatus.textContent = '已返回等待大厅, 可重新进入选风格';
+      return;
+    }
+    // client: 返回 = 退出房间回联机大厅(避免房主空等一个永不确认的对手)
     Net.close();
     btnHost.disabled = false; btnJoin.disabled = false;
     hostPickId = null; clientPickId = null; aiLocalPickId = null; roomMode = 'pvp';
@@ -733,18 +784,14 @@
     try {
       const code = await Net.hostRoom();
       game.setMode('host');
-      if (modeArg === 'ai') {
-        // AI 对战: host 先去选风格屏, 等 client 连入后再通知对方也选
-        showAIPickScreen();
-        setStatus('');
-      } else {
-        roleP1.textContent = '你';
-        roleP2.textContent = '对手';
-        hudP1Name.textContent = currentPlayer ? currentPlayer.name : 'BLUE-01';
-        showRoomLobby(code);
-        const mode = Net.getMode() === 'relay' ? '中继' : 'P2P';
-        setStatus('房号: ' + code + ' (' + mode + ')<br>等待对手加入' + loadingDots());
-      }
+      // [v115 修正] 两种玩法都先进等待大厅显示房号 —— AI 对战原先直接跳选风格屏,
+      // 导致房号根本不露面, 对手无从加入(用户实测"根本没法联机"的根因)
+      roleP1.textContent = roomMode === 'ai' ? '你的AI' : '你';
+      roleP2.textContent = roomMode === 'ai' ? '对手AI' : '对手';
+      hudP1Name.textContent = currentPlayer ? currentPlayer.name : 'BLUE-01';
+      showRoomLobby(code);
+      const mode = Net.getMode() === 'relay' ? '中继' : 'P2P';
+      setStatus('房号: ' + code + ' (' + mode + ')<br>等待对手加入' + loadingDots());
     } catch (e) {
       setStatus('创建失败: ' + (e.message || e), true);
       btnHost.disabled = false;
@@ -818,19 +865,11 @@
         if (game.mode === 'host' && game.running) { game.resetMatch(); game.start(); }
         return;
       }
-      // AI 对战: host 已在选风格屏; 通知 client 也去选风格(双方各自选自家 AI)
-      if (roomMode === 'ai' && game.mode === 'host') {
-        Net.sendAiMode();
-        return;
-      }
       // host: 对手已加入, 显示开始按钮
       if (game.mode === 'host') {
-        slotP2Name.textContent = oppName;
-        slotP2Status.textContent = '已就绪';
-        slotP2Status.className = 'slot-status ready';
-        btnRoomStart.classList.remove('hidden');
-        roomLobbyStatus.textContent = '对手 ' + oppName + ' 已加入! 点击开始对战';
-        hudP2Name.textContent = oppName;
+        // AI 对战房: 先告知 client 房间玩法(client 仅更新等待提示, 真正进选风格屏要等 host 点「进入选风格」)
+        if (roomMode === 'ai') Net.sendAiMode();
+        markPeerJoined(oppName);
       } else {
         // client: 显示对手名字, 等待 host 发 start 信号
         hudP1Name.textContent = oppName;
@@ -848,10 +887,23 @@
     });
     // ===== AI 对战专用事件 =====
     Net.on('aimode', () => {
-      // client 收到: 本房是 AI 对战, 进入选风格屏
+      // client 收到: 本房是 AI 对战房 —— 仅更新等待提示, 真正进选风格屏要等 host 发 aipickstart
+      if (game.mode !== 'client') return;
+      roomMode = 'ai';
+      showOverlay('已连接', '🤖 AI 对战房\n等待房主开始选风格...', '');
+    });
+    Net.on('aipickstart', () => {
+      // host 已点「进入选风格」: client 同步进选风格屏
       if (game.mode !== 'client') return;
       roomMode = 'ai';
       showAIPickScreen();
+    });
+    Net.on('aicancel', () => {
+      // host 从选风格屏返回了等待大厅: client 也退回等待状态
+      if (game.mode !== 'client') return;
+      aiLocalPickId = null;
+      showGame();
+      showOverlay('已连接', '🤖 AI 对战房\n房主返回了等待大厅...', '');
     });
     Net.on('aipick', (id) => {
       // host 收到 client 选的风格
@@ -921,6 +973,10 @@
 
   // ===== 更新公告: 点击版本号显示近三次更新(倒序: 最新在前; 每条用短句概括改动, 一点一换行; 每次发版须 prepend 一条真实版本) =====
   const CHANGELOG = [
+    ['v116', [
+      '修复「AI 对战」根本没法联机: 创建房间后现在会先进等待大厅显示房号, 对手才能加入(原先直接跳选风格屏, 房号从没露过面)',
+      '选风格屏「← 返回」保留且可反悔: 房主返回退回等待大厅(房间不解散), 对手同步退回等待'
+    ]],
     ['v114', [
       '联机新增「AI 对战」玩法: 双方各自为机甲 AI 挑战斗风格, 观战两台 AI 自动对打(BO3)',
       '6 种风格: 均衡/猛攻/铁壁/游击/疾风/精准, 房主与对手选好后自动开打'
