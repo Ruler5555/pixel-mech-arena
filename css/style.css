@@ -123,13 +123,22 @@ button:active:not(:disabled) { transform: translateY(2px); }
   padding: 12px 14px;
   text-align: left;
   min-width: 190px;
+  /* 移动端必须限宽: 原先 .cl-pt 是 nowrap, 长条目会把弹层撑出屏幕右侧 */
+  max-width: min(300px, calc(100vw - 24px));
+  box-sizing: border-box;
   animation: fadeIn 0.15s ease-out;
 }
 .cl-title { font-size: 8px; color: var(--red-lt); letter-spacing: 1px; margin-bottom: 8px; }
-.cl-item { font-size: 7px; color: var(--text); line-height: 2.2; white-space: nowrap; }
+.cl-item { font-size: 7px; color: var(--text); line-height: 2.2; }
 .cl-ver { color: var(--gold); margin-right: 8px; }
-.cl-points { margin: 2px 0 6px; line-height: 2.4; }
-.cl-pt { font-size: 7px; color: var(--text); white-space: nowrap; }
+.cl-points { margin: 2px 0 6px; line-height: 2.0; }
+/* 悬挂缩进: 圆点只出现在条目开头, 折行后的文字对齐到点右侧且不再重复出点 */
+.cl-pt {
+  font-size: 7px; color: var(--text);
+  padding-left: 10px; text-indent: -10px;
+  margin-bottom: 4px;
+  overflow-wrap: anywhere;
+}
 
 /* ===== 通用信息弹层(规则 / 连不上) ===== */
 .info-pop {
@@ -591,6 +600,7 @@ button:active:not(:disabled) { transform: translateY(2px); }
   color: var(--text);
 }
 .ms-mode-btn.blue { border-color: var(--blue-dk); box-shadow: 0 0 0 2px var(--blue-dk), 0 4px 0 var(--border); }
+.ms-mode-btn { touch-action: manipulation; }
 .ms-mode-btn:active:not(:disabled) { transform: translateY(2px); filter: brightness(1.2); }
 .ms-mode-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .ms-mode-ico {
@@ -654,6 +664,7 @@ button:active:not(:disabled) { transform: translateY(2px); }
   box-shadow: 0 0 0 2px var(--panel2), 0 4px 0 var(--border);
   text-align: center; cursor: pointer; color: var(--text);
   transition: transform 0.08s, filter 0.08s;
+  touch-action: manipulation; /* 消除移动端 300ms 延迟与滑动被判为滚动吞掉 click */
 }
 .ai-preset-card:active:not(:disabled) { transform: translateY(2px); filter: brightness(1.2); }
 .ai-preset-card.selected {
@@ -674,8 +685,11 @@ button:active:not(:disabled) { transform: translateY(2px); }
   background: var(--blue); border: 3px solid var(--border);
   border-radius: 14px; box-shadow: 0 4px 0 var(--border);
   cursor: pointer; transition: transform 0.08s, filter 0.08s;
+  touch-action: manipulation;
 }
 .big-btn.ai { background: #6f5bd6; }
+/* 条件未满足时按钮仍可点(点了会给文字提示), 只做视觉弱化, 不用 disabled 静默吞点击 */
+.big-btn.waiting { filter: grayscale(0.5) brightness(0.8); }
 .big-btn:active:not(:disabled) { transform: translateY(2px); filter: brightness(1.2); }
 .big-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 

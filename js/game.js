@@ -263,6 +263,19 @@ class Game {
     // ===== 观战客户端模式(AI 对战): 纯镜像, 不跑本地物理, 不发送输入 =====
     // 两台机甲都由 host 广播, 由 applySpectateState 直接套用(见 net 'state' 回调)
     if (this.mode === MODES.AI_CLIENT) {
+      // [观战插值] 位置不硬套快照, 而是逐帧逼近权威目标 —— 中继 15Hz 下若直接硬套会
+      // 一格一格顿, 插值后视觉接近 60fps。偏差过大(回合重置/传送)则直接拉回不做插值。
+      const k = Math.min(1, dt * 18);
+      [this.p1, this.p2].forEach((m) => {
+        if (!m || m._tx === undefined) return;
+        if (Math.abs(m._tx - m.x) > 120 || Math.abs(m._ty - m.y) > 120) {
+          m.x = m._tx; m.y = m._ty;
+        } else {
+          m.x += (m._tx - m.x) * k;
+          m.y += (m._ty - m.y) * k;
+        }
+        m.onGround = (m.y >= this.groundY - 0.5);
+      });
       this.particles = this.particles.filter(p => { p.update(dt); return p.life > 0; });
       return;
     }
@@ -358,7 +371,11 @@ class Game {
     // ===== host / aiHost: 定时广播 state =====
     if ((this.mode === MODES.HOST || this.mode === MODES.AI_HOST) && Net.isConnected()) {
       this.syncAcc += dt;
-      if (this.syncAcc >= 1 / 30) { // 30Hz
+      // [中继降码率] 公共 MQTT broker 吞吐有限, 30Hz 满速发会在 broker 侧堆积队列,
+      // 延迟从 ~150ms 一路累积到 500ms+(正是「中继连上后 500 延迟」的真正原因, 不是链路 RTT)。
+      // 中继下降到 15Hz, 队列不堆积, 延迟回落; 接收端配合位置插值, 视觉反而更顺。P2P 仍 30Hz。
+      const hz = (Net.getMode() === 'relay') ? 15 : 30;
+      if (this.syncAcc >= 1 / hz) {
         this.syncAcc = 0;
         Net.sendState(this._serializeState());
       }
@@ -435,8 +452,8 @@ class Game {
           this._lastStateFrame - s.frame < 3600) return;
       this._lastStateFrame = s.frame;
     }
-    this._applyMech(this.p1, s.p1);
-    this._applyMech(this.p2, s.p2);
+    this._applyMechSpectate(this.p1, s.p1);
+    this._applyMechSpectate(this.p2, s.p2);
     this.round = s.round;
     this.winsP1 = s.winsP1;
     this.winsP2 = s.winsP2;
@@ -445,6 +462,15 @@ class Game {
     this.shake = s.shake;
     if (s.gs !== this.state) this.setState(s.gs);
     this.stateTime = s.gst;
+  }
+  // 观战端专用: 权威字段照常硬套(血量/状态/动画), 但位置只记录目标, 由 update() 平滑逼近
+  _applyMechSpectate(m, d) {
+    if (!d) return;
+    const keepX = m.x, keepY = m.y;
+    this._applyMech(m, d);
+    m._tx = m.x; m._ty = m.y;                          // 权威目标位置
+    if (m._specInit) { m.x = keepX; m.y = keepY; }     // 保留当前渲染位, 交给插值逼近
+    else m._specInit = true;                           // 首帧直接落位, 避免从初始点飞过来
   }
   _applyMech(m, d) {
     if (!d) return;
