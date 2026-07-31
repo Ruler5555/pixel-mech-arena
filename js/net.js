@@ -209,7 +209,7 @@ const Net = (() => {
       });
 
       peer.on('error', (err) => {
-        // [v134] peer-unavailable 多为瞬态(主机信令尚未就绪 / 未传播到 broker), 不再立即判失败:
+        // [v136] peer-unavailable 多为瞬态(主机信令尚未就绪 / 未传播到 broker), 不再立即判失败:
         // 中继已并行启动会兜底连上; 仅其它致命错误才提示, 且中继也会继续保联
         if (err.type === 'peer-unavailable') {
           progress('主机暂时不可达, 中继通道保联中...');

@@ -61,7 +61,7 @@
 
   // ===== DOM: AI 对战选风格屏(早期声明, 避免切屏时 TDZ) =====
   const aiPickScreen = document.getElementById('aiPickScreen');
-  // [v134] 选风格屏顶部改用与对局相同的 top-cluster(延迟+模式+退出), 取代原 v130 的左上返回键
+  // [v136] 选风格屏顶部改用与对局相同的 top-cluster(延迟+模式+退出), 取代原 v130 的左上返回键
   const aiPickRtt = document.getElementById('aiPickRtt');
   const aiPickModeTag = document.getElementById('aiPickModeTag');
   const aiPickExitBtn = document.getElementById('aiPickExitBtn');
@@ -148,7 +148,7 @@
     updateNetTags();
   }
 
-  // [v134] 模式/延迟标签: 对局顶栏(#topCluster)与 AI 选风格屏顶栏(aiPickRtt/aiPickModeTag)共用同一套显示逻辑
+  // [v136] 模式/延迟标签: 对局顶栏(#topCluster)与 AI 选风格屏顶栏(aiPickRtt/aiPickModeTag)共用同一套显示逻辑
   function updateNetTags() {
     const setMode = (el) => {
       if (!el) return;
@@ -250,14 +250,14 @@
     modeSelect.classList.add('hidden');
     onlineModeSelect.classList.add('hidden');
     aiPickScreen.classList.remove('hidden');
-    document.body.classList.add('ai-pick');   // [v134] 隐藏常驻边缘条, 顶栏切换为与对局相同的布局
+    document.body.classList.add('ai-pick');   // [v136] 隐藏常驻边缘条, 顶栏切换为与对局相同的布局
     document.body.classList.add('ai-spectate'); // AI 观战(含选风格阶段): 隐藏触控操作键
     leaveGame();
     hideOverlay();
     renderAIPresets();
     aiLocalPickId = null;
     aiConfirmed = false;
-    // [v134] 选风格屏顶栏(延迟/模式)实时刷新, 离开时清理定时器
+    // [v136] 选风格屏顶栏(延迟/模式)实时刷新, 离开时清理定时器
     clearInterval(aiPickUiTimer);
     aiPickUiTimer = setInterval(updateNetTags, 1000);
     updateNetTags();
@@ -949,7 +949,7 @@
       // client 收到: 本房是 AI 对战房 —— 仅更新等待提示, 真正进选风格屏要等 host 发 aipickstart
       if (myRole !== 'client') return;
       roomMode = 'ai';
-      document.body.classList.add('ai-spectate'); // [v134] 等待房主选风格阶段即隐藏触控操作键(观战前奏)
+      document.body.classList.add('ai-spectate'); // [v136] 等待房主选风格阶段即隐藏触控操作键(观战前奏)
       if (game.running) return; // 已在局内(已选风格开打), 不再弹"等待房主选风格"遮罩
       if (!aiPickScreen.classList.contains('hidden')) return; // 已在选风格屏则不打断
       showOverlay('已连接', '🤖 AI 对战房\n等待房主开始选风格...', '');
