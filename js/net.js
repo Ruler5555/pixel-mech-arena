@@ -467,14 +467,26 @@ const Net = (() => {
   // ============ 通用接口 ============
   function send(obj) {
     obj.q = ++sendSeq;
-    // P2P 优先: 直连可用时一律走 P2P(同 WiFi/局域网延迟极低, 北京本地约 10~30ms)
-    // 仅当 P2P 彻底断开(conn 未 open)才退回中继 —— 不再因「P2P 短暂停滞」就切到境外
-    // 公共 broker.emqx.io, 那会引入 200ms+ 延迟尖刺(正是此前「加房延迟变大/掉线」的根因)
-    if (conn && conn.open) {
-      try { conn.send(obj); } catch (e) {}
+    const viaP2P = !!(conn && conn.open);
+    const viaRelay = !!(mqttClient && mqttClient.connected);
+    // [v122 修复] 双通道冗余发送(原设计意图见 _startRelayBackup 注释"双通道同发同序号"):
+    // 控制消息 P2P 与中继各发一份, 任一侧通道"假死"(发送端 conn.open 但对端已断)也能送达;
+    // 接收端 _acceptSeq 用同序号去重, 不会重复处理。
+    // 仅当"两条都通"时冗余 —— 这正是"非对称断链"场景(host→client 的 state 走活着的通道,
+    // 而 client→host 的 rmt 只走了已死的 P2P 被丢弃)的根因: 表现为对局正常, 但客户端点
+    // "再来一局"主机收不到。状态包(state)只走 P2P, 省中继带宽、保留 v119 中继降码率成果。
+    if (viaP2P && viaRelay) {
+      if (obj.t === 'state') {
+        try { conn.send(obj); } catch (e) {}
+      } else {
+        try { conn.send(obj); } catch (e) {}
+        _relaySend(obj);
+      }
       return;
     }
-    if (mqttClient && mqttClient.connected) _relaySend(obj);
+    // 仅单通道可用时走唯一可用通道
+    if (viaP2P) { try { conn.send(obj); } catch (e) {} return; }
+    if (viaRelay) _relaySend(obj);
   }
   function sendState(s) { send({ t: 'state', s }); }
   function sendInput(c) { send({ t: 'input', c }); }
