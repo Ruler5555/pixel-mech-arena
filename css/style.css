@@ -849,6 +849,8 @@ button:active:not(:disabled) { transform: translateY(2px); }
    平时 topCluster 是 position:absolute 浮于画布右上角;
    进对局后变成全宽顶栏, 视觉上替代原 persistEdge, 但只显示对局相关控件 */
 body.in-game #persistEdge { display: none; }
+/* [v134] AI 选风格屏复用对局顶栏布局: 隐藏常驻边缘条, 顶栏接管(与 in-game 一致) */
+body.ai-pick #persistEdge { display: none; }
 body.in-game #gameWrap { padding-top: 0; }
 body.in-game .top-cluster {
   position: relative;
@@ -898,6 +900,24 @@ body.in-game .exit-mobile-btn { font-size: 9px; padding: 3px 9px; }
 .rtt-tag.good { color: #4ade80; }
 .rtt-tag.ok { color: #facc15; }
 .rtt-tag.bad { color: #f87171; }
+
+/* [v134] AI 选风格屏顶栏: 与对局顶栏(#topCluster in-game)完全相同的全宽布局(延迟+模式+退出) */
+body.ai-pick .top-cluster {
+  position: relative; top: auto; right: auto; z-index: 5;
+  width: 100%; height: 38px; padding: 0 10px; gap: 5px;
+  background: rgba(14,14,38,0.96);
+  border: none; border-bottom: 2px solid var(--border);
+  border-radius: 0; box-shadow: none;
+  justify-content: flex-end; pointer-events: auto;
+}
+body.ai-pick .top-cluster > * { pointer-events: auto; }
+body.ai-pick .rtt-tag,
+body.ai-pick .mode-tag { font-size: 7px; color: var(--dim); letter-spacing: 0; }
+body.ai-pick .rtt-tag.good { color: #4ade80; }
+body.ai-pick .rtt-tag.ok { color: #facc15; }
+body.ai-pick .rtt-tag.bad { color: #f87171; }
+body.ai-pick .exit-mobile-btn { display: inline-flex; font-size: 9px; padding: 3px 9px; }
+.ai-pick-title { text-align: center; width: 100%; margin: 2px 0 6px; }
 
 /* ===== Overlay ===== */
 .overlay {

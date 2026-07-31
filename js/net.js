@@ -172,35 +172,35 @@ const Net = (() => {
       handshaked = false;
       progress('正在连接信令服务器...');
       let resolved = false;
-      const finish = (c) => { if (resolved) return; resolved = true; _startKeepAlive(); resolve(c); };
+      const finish = (c) => { if (resolved) return; resolved = true; clearTimeout(joinTimeout); _startKeepAlive(); resolve(c); };
       try {
         peer = new Peer({ debug: 1, config: ICE_SERVERS });
       } catch (e) { reject(e); return; }
 
+      // [v134 修复] 整体兜底: 双通道(P2P + 中继)都连不上(极端弱网 / 信令与所有 broker 全挂)时,
+      // 25s 后明确报错, 不再无限转圈(避免用户误以为卡死)
+      const joinTimeout = setTimeout(() => {
+        if (!resolved) { progress('连接超时'); reject(new Error('连接超时, 请检查网络后重试')); }
+      }, 25000);
+
       peer.on('open', () => {
-        progress('信令已就绪,正在连接主机(P2P 直连优先)...');
+        progress('信令已就绪, 正在连接主机(P2P 直连优先)...');
         // [稳定性修复] reliable:true(有序可靠通道): 旧版不可靠通道会静默丢失 start/reset
         // 等关键控制消息, 导致"主机点了开始/重开, 客户端没反应"; 状态包小且 30Hz, 可靠通道足够流畅
         conn = peer.connect(PEER_PREFIX + code, { reliable: true, serialization: 'json' });
         bindConn(conn);
-
-        // [P2P 优先·长宽限] 给 TURN/STUN 充足握手时间(20s): 用户明确要求"宁等多几秒也要 P2P",
-        // 内置免费 TURN 后多数跨网 1~3s 即建连, 20s 宽限内未连上才并行启动中继备用(不放弃 P2P)
-        clearTimeout(connectDeadline);
-        // [v121] 判据改为 handshaked: P2P 通道开了但主机侧没响应(主机 peer 已失效)时,
-        // 旧代码因 conn.open=true 而永不启用中继, 客户端会一直等一个不会来的回应
-        connectDeadline = setTimeout(() => {
-          if (!handshaked) {
-            progress('P2P 直连较慢, 启用中继备用通道(保联机房)...');
-            _startRelayBackup(code, () => finish(code));
-          }
-        }, 20000);
-
+        // [P2P 优先] P2P 直连一就绪立即 resolve(不等中继), 直连优先接管
         conn.on('open', () => {
           if (!resolved) finish(code);
-          mode = 'p2p'; // [P2P 优先] 即便中继已连, 直连就绪即接管
+          mode = 'p2p';
           progress('P2P 直连已建立, 优先使用低延迟通道');
         });
+
+        // [v134 修复] 客户端进房即并行启动中继备用(不等 20s 宽限): 主机建房时已并行订阅中继(v133),
+        // P2P 瞬态 peer-unavailable / 首次点击偶发失败时, 中继会在 1~3s 内兜底连上并 resolve,
+        // 根治「分享到世界后客户端首次点击加入失败、需二次点击」。P2P 仍优先(先连上先 resolve),
+        // 中继仅保联机房(见 send() 路由, state 只走 P2P, 不影响手感)。
+        _startRelayBackup(code, () => finish(code));
       });
 
       peer.on('disconnected', () => {
@@ -209,12 +209,13 @@ const Net = (() => {
       });
 
       peer.on('error', (err) => {
+        // [v134] peer-unavailable 多为瞬态(主机信令尚未就绪 / 未传播到 broker), 不再立即判失败:
+        // 中继已并行启动会兜底连上; 仅其它致命错误才提示, 且中继也会继续保联
         if (err.type === 'peer-unavailable') {
-          reject(new Error('房间不存在或已关闭'));
-        } else {
-          progress('错误: ' + err.type + ',启用中继备用...');
-          _startRelayBackup(code, () => finish(code));
+          progress('主机暂时不可达, 中继通道保联中...');
+          return;
         }
+        progress('信令错误: ' + err.type + ', 中继通道保联中...');
       });
     });
   }

@@ -15,7 +15,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" media="print" onload="this.media='all'">
 <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap"></noscript>
-<link rel="stylesheet" href="css/style.css?v=133">
+<link rel="stylesheet" href="css/style.css?v=136">
 </head>
 <body>
 <div id="app">
@@ -23,7 +23,7 @@
   <!-- ===== 全局常驻边缘: 规则 + 版本号(所有界面可见, 不滚动即可见) ===== -->
   <div id="persistEdge">
     <button id="rulesBtn" class="edge-btn" aria-label="游戏规则">规则?</button>
-    <span id="versionTag" class="version-tag">v133</span>
+    <span id="versionTag" class="version-tag">v136</span>
   </div>
 
   <!-- ===== 登录界面 ===== -->
@@ -179,12 +179,14 @@
 
   <!-- ===== AI 对战 · 选风格屏(双方各自为机甲 AI 选战斗风格, 然后观战对打) ===== -->
   <div id="aiPickScreen" class="hidden">
-    <div class="ol-top">
-      <button id="btnAIPickBack" class="bar-btn">返回大厅</button>
-      <span class="ol-title">选择机甲 AI 风格</span>
-      <span class="ol-spacer"></span>
+    <!-- [v134] 顶栏改为与对局相同布局: 延迟 + 模式 + 退出(取代原 v130 左上返回键), 退出键保留连接返回等待大厅 -->
+    <div class="top-cluster ai-pick-topbar">
+      <span id="aiPickRtt" class="rtt-tag">…</span>
+      <span id="aiPickModeTag" class="mode-tag">…</span>
+      <button id="aiPickExitBtn" class="exit-mobile-btn" aria-label="退出房间">退出</button>
     </div>
     <div class="ms-body">
+      <h2 class="ol-title ai-pick-title">选择机甲 AI 风格</h2>
       <p class="ai-pick-tip">赛前为你的机甲 AI 挑一个战斗风格, 双方选好后自动开打, 你只需观战 BO3</p>
       <div id="aiPresetGrid" class="ai-preset-grid"></div>
       <div id="aiPickStatus" class="ai-pick-status"></div>
@@ -329,16 +331,16 @@
 </div>
 
 <!-- 所有脚本加 defer: 并行下载、按序执行、不阻塞首屏 DOM 解析; 加快首屏可点 -->
-<script defer src="vendor/peerjs.min.js?v=133"></script>
-<script defer src="vendor/mqtt.min.js?v=133"></script>
-<script defer src="js/auth.js?v=133"></script>
-<script defer src="js/world.js?v=133"></script>
-<script defer src="js/input.js?v=133"></script>
-<script defer src="js/touch.js?v=133"></script>
-<script defer src="js/sprite.js?v=133"></script>
-<script defer src="js/player.js?v=133"></script>
-<script defer src="js/net.js?v=133"></script>
-<script defer src="js/game.js?v=133"></script>
-<script defer src="js/main.js?v=133"></script>
+<script defer src="vendor/peerjs.min.js?v=136"></script>
+<script defer src="vendor/mqtt.min.js?v=136"></script>
+<script defer src="js/auth.js?v=136"></script>
+<script defer src="js/world.js?v=136"></script>
+<script defer src="js/input.js?v=136"></script>
+<script defer src="js/touch.js?v=136"></script>
+<script defer src="js/sprite.js?v=136"></script>
+<script defer src="js/player.js?v=136"></script>
+<script defer src="js/net.js?v=136"></script>
+<script defer src="js/game.js?v=136"></script>
+<script defer src="js/main.js?v=136"></script>
 </body>
 </html>

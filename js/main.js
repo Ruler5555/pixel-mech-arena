@@ -61,10 +61,14 @@
 
   // ===== DOM: AI 对战选风格屏(早期声明, 避免切屏时 TDZ) =====
   const aiPickScreen = document.getElementById('aiPickScreen');
-  const btnAIPickBack = document.getElementById('btnAIPickBack');
+  // [v134] 选风格屏顶部改用与对局相同的 top-cluster(延迟+模式+退出), 取代原 v130 的左上返回键
+  const aiPickRtt = document.getElementById('aiPickRtt');
+  const aiPickModeTag = document.getElementById('aiPickModeTag');
+  const aiPickExitBtn = document.getElementById('aiPickExitBtn');
   const aiPresetGrid = document.getElementById('aiPresetGrid');
   const aiPickStatus = document.getElementById('aiPickStatus');
   const btnAIStart = document.getElementById('btnAIStart');
+  let aiPickUiTimer = null; // 选风格屏顶栏(延迟/模式)的轻量刷新定时器, 离开时清理
 
   // ===== DOM: 游戏区 =====
   const gameWrap = document.getElementById('gameWrap');
@@ -141,35 +145,34 @@
     } else {
       elNet.textContent = '●'; elNet.className = 'net-status off';
     }
-    if (game.mode === 'offline') {
-      modeTag.textContent = '离线 vs AI';
-    } else if (game.mode === 'host' || game.mode === 'aiHost') {
-      const m = Net.getMode() === 'relay' ? '中继' : 'P2P';
-      modeTag.textContent = Net.isConnected()
-        ? (game.mode === 'aiHost' ? 'AI房主 · ' : '主机 · ') + m
-        : (game.mode === 'aiHost' ? 'AI房主 · 等待中' : '主机 · 等待中');
-    } else if (game.mode === 'client' || game.mode === 'aiClient') {
-      const m = Net.getMode() === 'relay' ? '中继' : 'P2P';
-      modeTag.textContent = Net.isConnected()
-        ? (game.mode === 'aiClient' ? 'AI观战 · ' : '客户端 · ') + m
-        : (game.mode === 'aiClient' ? 'AI观战 · 重连中' : '客户端 · 重连中');
-    }
-    // 实时 RTT/状态显示: 对局顶栏常驻, 离线显示「本地」, 联机显示「延迟 Xms / 测速中…」, 按延迟高低变色(绿<80 / 黄<150 / 红)
-    if (game.mode === 'offline') {
-      rttTag.style.display = '';
-      rttTag.textContent = '本地';
-      rttTag.className = 'rtt-tag';
-    } else {
-      rttTag.style.display = '';
-      const r = Net.getRtt();
-      if (r > 0) {
-        rttTag.textContent = '延迟 ' + r + 'ms';
-        rttTag.className = 'rtt-tag ' + (r < 80 ? 'good' : r < 150 ? 'ok' : 'bad');
-      } else {
-        rttTag.textContent = '测速中…';
-        rttTag.className = 'rtt-tag';
+    updateNetTags();
+  }
+
+  // [v134] 模式/延迟标签: 对局顶栏(#topCluster)与 AI 选风格屏顶栏(aiPickRtt/aiPickModeTag)共用同一套显示逻辑
+  function updateNetTags() {
+    const setMode = (el) => {
+      if (!el) return;
+      if (game.mode === 'offline') {
+        el.textContent = '离线 vs AI';
+      } else if (game.mode === 'host' || game.mode === 'aiHost') {
+        const m = Net.getMode() === 'relay' ? '中继' : 'P2P';
+        el.textContent = (game.mode === 'aiHost' ? 'AI房主 · ' : '主机 · ') + (Net.isConnected() ? m : m + ' 等待中');
+      } else if (game.mode === 'client' || game.mode === 'aiClient') {
+        const m = Net.getMode() === 'relay' ? '中继' : 'P2P';
+        el.textContent = (game.mode === 'aiClient' ? 'AI观战 · ' : '客户端 · ') + (Net.isConnected() ? m : m + ' 重连中');
       }
-    }
+    };
+    setMode(modeTag);
+    setMode(aiPickModeTag);
+    const setRtt = (el) => {
+      if (!el) return;
+      if (game.mode === 'offline') { el.textContent = '本地'; el.className = 'rtt-tag'; return; }
+      const r = Net.getRtt();
+      if (r > 0) { el.textContent = '延迟 ' + r + 'ms'; el.className = 'rtt-tag ' + (r < 80 ? 'good' : r < 150 ? 'ok' : 'bad'); }
+      else { el.textContent = '测速中…'; el.className = 'rtt-tag'; }
+    };
+    setRtt(rttTag);
+    setRtt(aiPickRtt);
   }
 
   // ===== 登录界面逻辑 =====
@@ -247,12 +250,17 @@
     modeSelect.classList.add('hidden');
     onlineModeSelect.classList.add('hidden');
     aiPickScreen.classList.remove('hidden');
+    document.body.classList.add('ai-pick');   // [v134] 隐藏常驻边缘条, 顶栏切换为与对局相同的布局
     document.body.classList.add('ai-spectate'); // AI 观战(含选风格阶段): 隐藏触控操作键
     leaveGame();
     hideOverlay();
     renderAIPresets();
     aiLocalPickId = null;
     aiConfirmed = false;
+    // [v134] 选风格屏顶栏(延迟/模式)实时刷新, 离开时清理定时器
+    clearInterval(aiPickUiTimer);
+    aiPickUiTimer = setInterval(updateNetTags, 1000);
+    updateNetTags();
     updateAIPickStatus(); // 文案与可点状态统一由此函数决定, 不再在这里写死
   }
 
@@ -379,7 +387,9 @@
   function showRoomLobby(code, opts) {
     opts = opts || {};
     currentRoomCode = code;
+    document.body.classList.remove('ai-pick');      // 退出 AI 选风格屏: 恢复常驻边缘条与对局顶栏布局
     document.body.classList.remove('ai-spectate'); // 退出 AI 选风格屏返回等待大厅: 恢复触控键
+    clearInterval(aiPickUiTimer); aiPickUiTimer = null;
     lobby.classList.add('hidden');
     gameWrap.classList.add('hidden');
     onlineHub.classList.add('hidden');
@@ -488,6 +498,8 @@
 
   // ===== 游戏区显示/隐藏 =====
   function showGame() {
+    document.body.classList.remove('ai-pick');
+    clearInterval(aiPickUiTimer); aiPickUiTimer = null;
     lobby.classList.add('hidden');
     roomLobby.classList.add('hidden');
     onlineHub.classList.add('hidden');
@@ -514,7 +526,9 @@
 
   function backToLobby() {
     resetRematchState();
+    document.body.classList.remove('ai-pick');      // 退出 AI 观战: 恢复常驻边缘条与对局顶栏布局
     document.body.classList.remove('ai-spectate'); // 退出 AI 观战: 恢复触控操作键
+    clearInterval(aiPickUiTimer); aiPickUiTimer = null;
     roomMode = 'pvp'; // 复位玩法与 AI 选择, 防止状态泄漏到下一个房间
     hostPickId = null; clientPickId = null; aiLocalPickId = null; aiConfirmed = false;
     myRole = null;
@@ -710,7 +724,7 @@
     roomMode = 'ai';
     startHost('ai').finally(() => { btnOnlineModeAIvAI.disabled = false; });
   });
-  if (btnAIPickBack) btnAIPickBack.addEventListener('click', () => {
+  if (aiPickExitBtn) aiPickExitBtn.addEventListener('click', () => {
     // host: 返回 = 退回等待大厅(房间与连接都保留, 可以反悔重选), 并通知 client 一起退回等待
     if (myRole === 'host' && Net.isConnected()) {
       hostPickId = null; clientPickId = null; aiLocalPickId = null; aiConfirmed = false;
@@ -935,6 +949,7 @@
       // client 收到: 本房是 AI 对战房 —— 仅更新等待提示, 真正进选风格屏要等 host 发 aipickstart
       if (myRole !== 'client') return;
       roomMode = 'ai';
+      document.body.classList.add('ai-spectate'); // [v134] 等待房主选风格阶段即隐藏触控操作键(观战前奏)
       if (game.running) return; // 已在局内(已选风格开打), 不再弹"等待房主选风格"遮罩
       if (!aiPickScreen.classList.contains('hidden')) return; // 已在选风格屏则不打断
       showOverlay('已连接', '🤖 AI 对战房\n等待房主开始选风格...', '');
@@ -1024,6 +1039,11 @@
   // ===== 更新公告: 点击版本号显示近三次更新(倒序: 最新在前; 每条用短句概括改动, 一点一换行; 每次发版须 prepend 一条真实版本) =====
   // 文案规则: 每条不超过 30 字, 一条一个圆点, 折行不再出点(见 .cl-pt 悬挂缩进)
   const CHANGELOG = [
+    ['v136', [
+      '修分享到世界后客户端首次加入偶发失败',
+      'AI观战等待阶段即隐藏触控操作键',
+      '选风格屏顶栏改与对局相同(延迟/模式/退出)'
+    ]],
     ['v133', [
       '修中继进房主机不刷新+客户端断重连',
       'AI选风格屏即隐藏触控操作键',
