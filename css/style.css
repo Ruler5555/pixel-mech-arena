@@ -2,7 +2,7 @@
 /* Press Start 2P 字体改为 HTML head 内 preconnect + 异步 link 加载, 不阻塞首屏 */
 
 :root {
-  /* 红蓝主色: 蓝=游玩/副本, 红=联机/对抗 */
+  /* 红蓝主色: 蓝=游玩/单人模式, 红=联机/对抗 */
   --blue: #3da5ff;
   --blue-dk: #1f6fd0;
   --blue-lt: #8fd4ff;
