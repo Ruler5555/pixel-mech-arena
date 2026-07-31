@@ -717,7 +717,16 @@
       roomLobbyStatus.textContent = '已返回等待大厅, 可重新进入选风格';
       return;
     }
-    // client: 返回 = 退出房间回联机大厅(避免房主空等一个永不确认的对手)
+    // client: 返回 = 退回等待大厅(保留连接, 不退出房间, 与等待大厅「返回大厅」一致)
+    // 这样 client 在 AI 选风格屏卡住时也能像等待大厅一样「返回大厅」, 等房主重新进入选风格
+    if (Net.isConnected()) {
+      hostPickId = null; clientPickId = null; aiLocalPickId = null; aiConfirmed = false;
+      Net.sendAiCancel(); // 通知房主: 我退回等待大厅了(房主侧同步退回选风格屏)
+      showRoomLobby(Net.getRoomCode(), { keepState: true });
+      roomLobbyStatus.textContent = '已返回等待大厅, 等待房主重新进入选风格';
+      return;
+    }
+    // 完全断线(极少): 退到联机大厅
     Net.close();
     btnHost.disabled = false; btnJoin.disabled = false;
     hostPickId = null; clientPickId = null; aiLocalPickId = null; aiConfirmed = false;
@@ -1013,6 +1022,10 @@
   // ===== 更新公告: 点击版本号显示近三次更新(倒序: 最新在前; 每条用短句概括改动, 一点一换行; 每次发版须 prepend 一条真实版本) =====
   // 文案规则: 每条不超过 30 字, 一条一个圆点, 折行不再出点(见 .cl-pt 悬挂缩进)
   const CHANGELOG = [
+    ['v130', [
+      '修AI选风格客户端确认主机收不到',
+      '选风格屏新增返回大厅键(同等待大厅)'
+    ]],
     ['v128', [
       '盾牌减伤90%反伤60%加0.5秒再防冷却',
       'AI观战模式隐藏全部触控操作键',

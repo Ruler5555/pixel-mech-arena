@@ -246,6 +246,14 @@ const Net = (() => {
   // 握手成功统一出口(置位 handshaked, 供中继兜底判定)
   function _emitConnected(payload) {
     handshaked = true;
+    // [v129] P2P 一旦真正握上手, 立即并行拉起中继备用通道(双通道冗余):
+    // 之前中继只在「20s 未握手」才启动, 导致 P2P 连上后 client→host 控制消息
+    // (aipick / rmt / aistart 等) 在 P2P 单向掉线时没有任何兜底, 表现为
+    // 「客户端已确认 / 点再来一局 主机收不到」。中继仅承载控制消息(state 仍走 P2P,
+    // 见 send()), 不影响手感, 纯保联机房。_startRelayBackup 对已连中继是 no-op, 可重复调用。
+    if (mode === 'p2p' && roomCode) {
+      try { _startRelayBackup(roomCode, () => {}); } catch (e) {}
+    }
     emit('connected', payload || { name: '' });
   }
   // 通用消息路由(P2P 与中继共用)
