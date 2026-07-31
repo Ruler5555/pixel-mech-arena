@@ -1011,6 +1011,8 @@
       if (game.mode === 'host') game.applyRemoteInput(c);
     });
     Net.on('progress', (msg) => {
+      // v157: 连接阶段(角色未建立)把进度/诊断直接显示到大厅状态栏, 不只在隐藏弹层里
+      if (!Net.getRole()) setStatus(msg);
       const cur = ovText.textContent || '';
       const lines = cur.split('\n').filter(l => !l.startsWith('['));
       ovText.textContent = lines.join('\n') + '\n[' + msg + ']';
@@ -1068,6 +1070,10 @@
   // ===== 更新公告: 点击版本号显示近三次更新(倒序: 最新在前; 每条用短句概括改动, 一点一换行; 每次发版须 prepend 一条真实版本) =====
   // 文案规则: 每条不超过 30 字, 一条一个圆点, 折行不再出点(见 .cl-pt 悬挂缩进)
   const CHANGELOG = [
+    ['v157', [
+      '修复: 连接诊断之前只显示在隐藏弹层, 现在大厅状态栏可见',
+      '建房/加入时可直接看到 TURN/ICE/候选统计'
+    ]],
     ['v156', [
       '连接状态栏加诊断: TURN/ICE状态/候选类型数量实时显示',
       '方便定位跨网连不上卡在哪一步(排查vivo浏览器)'
