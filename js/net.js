@@ -47,6 +47,12 @@ const Net = (() => {
   let keepAliveTimer = null;
   let connectDeadline = null;
   let playerName = ''; // 本地玩家名, 连接时发给对方
+  // [v121 修复] 握手完成标记: 只有真正收到对端 hello/world 才算"对上了".
+  // 旧代码用 conn.open 判断是否需要启用中继备用 —— 但 PeerJS 的 'connection' 事件在
+  // 收到 offer 时就触发(ICE 还没通), 那里 clearTimeout 掉了中继兜底定时器; 若随后 ICE 失败,
+  // host 就永远不会订阅中继 topic, 而 client 已回落中继, hello 发进了没人听的频道
+  // => "客户端进去了, 主机毫无反应"。改为一律以握手是否完成为准。
+  let handshaked = false;
   // [同步修复] 双通道去重序号: P2P 与中继同发同一条消息, 慢通道晚到的旧拷贝
   // 会覆盖新状态(画面回跳)/重复触发攻击(重复出招), 用单调序号 q 丢弃重复与过期包
   let sendSeq = 0;     // 发送序号
@@ -81,6 +87,7 @@ const Net = (() => {
     return new Promise((resolve, reject) => {
       role = 'host';
       roomCode = genCode();
+      handshaked = false;
       progress('正在连接信令服务器...');
       let resolved = false;
       // 统一出口: 无论 P2P 还是中继连上, 都 resolve hostRoom, 否则建房会永远卡住
@@ -106,12 +113,17 @@ const Net = (() => {
         progress('信令已就绪, 等待对手...');
         finish(roomCode);
         // [P2P 优先·长宽限] 用户明确要求"宁等多几秒也要 P2P", 给 P2P(含 TURN)充足建连时间,
-        // 20s 内无对手经 P2P 连入才并行启动中继备用(不放弃 P2P); 内置免费 TURN 后对称 NAT 1~3s 即建连
-        connectDeadline = setTimeout(() => { if (!conn || !conn.open) toRelayBackup(); }, 20000);
+        // 20s 内握手仍未完成才并行启动中继备用(不放弃 P2P); 内置免费 TURN 后对称 NAT 1~3s 即建连
+        // [v121] 判据从 conn.open 改为 handshaked, 且此定时器不再被任何地方 clear ——
+        // 只要没真正握上手, 中继备用一定会起来, 杜绝"主机永不订阅中继"的死角
+        connectDeadline = setTimeout(() => { if (!handshaked) toRelayBackup(); }, 20000);
+        // 二次保险: 40s 仍未握手(P2P 慢 + 首个中继 broker 挂掉), 再催一次
+        setTimeout(() => { if (!handshaked) { relayStarted = false; toRelayBackup(); } }, 40000);
       });
 
       peer.on('connection', (c) => {
-        clearTimeout(connectDeadline); // P2P 连入即取消中继兜底定时器
+        // [v121] 这里绝不能 clearTimeout(connectDeadline): 'connection' 只代表收到了 offer,
+        // ICE 可能随后失败。旧代码在此清掉兜底定时器, 是"客户端进来了主机没反应"的根因。
         if (conn && conn.open && conn !== c) { c.close(); return; } // 已有直连, 丢弃重复
         // [P2P 优先] 即便已并行启用中继备用通道, 只要 P2P 直连连入就优先接管
         // (用户诉求: 中继延迟 800ms 没法玩, 能走 P2P 一律走 P2P, 中继仅"保联机房")
@@ -152,6 +164,7 @@ const Net = (() => {
     return new Promise((resolve, reject) => {
       role = 'client';
       roomCode = code;
+      handshaked = false;
       progress('正在连接信令服务器...');
       let resolved = false;
       const finish = (c) => { if (resolved) return; resolved = true; _startKeepAlive(); resolve(c); };
@@ -169,15 +182,16 @@ const Net = (() => {
         // [P2P 优先·长宽限] 给 TURN/STUN 充足握手时间(20s): 用户明确要求"宁等多几秒也要 P2P",
         // 内置免费 TURN 后多数跨网 1~3s 即建连, 20s 宽限内未连上才并行启动中继备用(不放弃 P2P)
         clearTimeout(connectDeadline);
+        // [v121] 判据改为 handshaked: P2P 通道开了但主机侧没响应(主机 peer 已失效)时,
+        // 旧代码因 conn.open=true 而永不启用中继, 客户端会一直等一个不会来的回应
         connectDeadline = setTimeout(() => {
-          if (!conn || !conn.open) {
+          if (!handshaked) {
             progress('P2P 直连较慢, 启用中继备用通道(保联机房)...');
             _startRelayBackup(code, () => finish(code));
           }
         }, 20000);
 
         conn.on('open', () => {
-          clearTimeout(connectDeadline);
           if (!resolved) finish(code);
           mode = 'p2p'; // [P2P 优先] 即便中继已连, 直连就绪即接管
           progress('P2P 直连已建立, 优先使用低延迟通道');
@@ -229,6 +243,11 @@ const Net = (() => {
     if (lastRecvSeq - msg.q > 5000) { lastRecvSeq = msg.q; return true; } // 对端重启
     return false; // 重复/过期拷贝, 丢弃
   }
+  // 握手成功统一出口(置位 handshaked, 供中继兜底判定)
+  function _emitConnected(payload) {
+    handshaked = true;
+    emit('connected', payload || { name: '' });
+  }
   // 通用消息路由(P2P 与中继共用)
   function _routeMsg(msg) {
     if (msg.t === 'state')       emit('state', msg.s);
@@ -257,7 +276,7 @@ const Net = (() => {
       if (!msg || !msg.t) return;
       if (!_acceptSeq(msg)) return;
       lastP2pRecv = Date.now(); // 标记 P2P 活跃, 用于自适应路由判定
-      if (msg.t === 'hello') emit('connected', { name: msg.n || '' });
+      if (msg.t === 'hello') _emitConnected({ name: msg.n || '' });
       else _routeMsg(msg);
     });
     c.on('close', () => {
@@ -364,7 +383,7 @@ const Net = (() => {
           if (peerReady) {
             if (role === 'client') _relaySend({ t: 'hello', n: playerName });
             // host 收到 hello 会自动回 world
-            emit('connected', { name: '' });
+            _emitConnected({ name: '' });
           }
         }
       });
@@ -378,7 +397,7 @@ const Net = (() => {
             if (!peerReady) {
               peerReady = true;
               progress('对手已加入');
-              emit('connected', { name: msg.n || '' });
+              _emitConnected({ name: msg.n || '' });
             }
             // host 每次收到 hello 都回 world 带名字, 确保 client 能收到
             if (role === 'host') _relaySend({ t: 'world', n: playerName });
@@ -388,7 +407,7 @@ const Net = (() => {
               peerReady = true;
               if (helloRetryTimer) { clearTimeout(helloRetryTimer); helloRetryTimer = null; }
               progress('已连接主机');
-              emit('connected', { name: msg.n || '' });
+              _emitConnected({ name: msg.n || '' });
             }
           } else {
             // 游戏消息统一走去重(hello/world 握手消息不去重, 允许重发)
@@ -493,6 +512,8 @@ const Net = (() => {
     try { if (mqttClient) mqttClient.end(true); } catch(e){}
     mqttClient = null; relayTopic = null;
     role = null; roomCode = null; mode = 'p2p';
+    handshaked = false;
+    clearTimeout(connectDeadline); connectDeadline = null;
     sendSeq = 0; lastRecvSeq = 0; lastP2pRecv = 0; rtt = 0; // 新会话重置去重/路由状态
     _stopPingMonitor();
   }

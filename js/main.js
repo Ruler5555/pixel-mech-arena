@@ -590,7 +590,7 @@
   function checkRematchGo() {
     if (!(rmLocal && rmRemote)) return;
     resetRematchState();
-    if (game.mode === 'host') {
+    if (game.mode === 'host' || game.mode === 'aiHost') {
       Net.sendReset(); // 通知客户端同步重开
       game.resetMatch();
       game.start();
@@ -1008,6 +1008,10 @@
   // ===== 更新公告: 点击版本号显示近三次更新(倒序: 最新在前; 每条用短句概括改动, 一点一换行; 每次发版须 prepend 一条真实版本) =====
   // 文案规则: 每条不超过 30 字, 一条一个圆点, 折行不再出点(见 .cl-pt 悬挂缩进)
   const CHANGELOG = [
+    ['v121', [
+      'AI 对战「再来一局」正常重开',
+      '修复客户端进房主机偶尔无反应'
+    ]],
     ['v119', [
       '中继模式降码率, 延迟大幅回落',
       '观战画面加插值, 不再一格格顿',
