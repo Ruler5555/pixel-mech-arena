@@ -175,10 +175,12 @@ const Sprite = (() => {
         ctx.save();
         ctx.globalAlpha = 1 - p.p;
         ctx.strokeStyle = state === 'atkH' ? '#ffcc33' : '#ffffff';
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 1.5; // [v137] 略减光圈粗细, 视觉更轻盈
         ctx.beginPath();
-        // 以"最后挥出的拳头"(武器枪口)中心为基准, 竖直方向略微下移, 视觉更舒服
-        ctx.arc((12.5 + thrustX) * S, -(wY + 1.6) * S, rad * S, 0, Math.PI * 2);
+        // [v137] 圆心 = 拳头最外部"枪口竖条"(r(11+thrustX, wY-0.5, 1.5, 3.5))的几何中心
+        //   = (11 + thrustX + 0.75, (wY-0.5) + 3.5/2) = (11.75 + thrustX, wY + 1.25)
+        // 相对上一版(12.5, wY+1.6)整体下移且略向左收, 正落在拳口最外端小长方形正中
+        ctx.arc((11.75 + thrustX) * S, -(wY + 1.25) * S, rad * S, 0, Math.PI * 2);
         ctx.stroke();
         ctx.restore();
       }

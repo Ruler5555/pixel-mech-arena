@@ -570,13 +570,15 @@
     if (rmTimer) { clearInterval(rmTimer); rmTimer = null; }
   }
   function renderRematchOverlay() {
+    if (exitConfirmMode) return; // [v137] 退出确认框弹出期间, 300ms 计时器不得覆盖它(否则退出键"点了没反应")
     const n = (rmLocal ? 1 : 0) + (rmRemote ? 1 : 0);
     const secs = Math.max(0, Math.ceil((rmDeadline - Date.now()) / 1000));
     let txt = rmChamp + '\n\n再来一局 ' + n + '/2';
     if (rmLocal && !rmRemote) txt += '\n已确认, 等待对方...';
     if (!rmLocal && rmRemote) txt += '\n对方想再来一局!';
     txt += '\n' + secs + ' 秒后自动返回大厅';
-    showOverlay('比赛结束', txt, rmLocal ? '' : '再来一局');
+    // [v137] 联机结算也提供"返回大厅"退出键(与单人模式一致); 右上常驻退出键因本弹层 z-index 低于顶栏(50>40)同样可点
+    showOverlay('比赛结束', txt, rmLocal ? '' : '再来一局', { cancelable: true, cancelLabel: '返回大厅' });
   }
   function startRematchFlow(champ) {
     // 只重置本地确认与计时; rmRemote 保留(对方的确认可能比本机进入结算画面更早到达)
@@ -857,7 +859,8 @@
     if (exitConfirmMode) {
       exitConfirmMode = false;
       hideOverlay();
-      game.start(); // 所有模式恢复对局
+      if (game.state === 'matchEnd') { renderRematchOverlay(); } // [v137] 结算画面无"恢复对局", 回到再来一局弹层
+      else { game.start(); } // 对局进行中: 恢复对局
       return;
     }
     backToLobby();
@@ -1039,6 +1042,11 @@
   // ===== 更新公告: 点击版本号显示近三次更新(倒序: 最新在前; 每条用短句概括改动, 一点一换行; 每次发版须 prepend 一条真实版本) =====
   // 文案规则: 每条不超过 30 字, 一条一个圆点, 折行不再出点(见 .cl-pt 悬挂缩进)
   const CHANGELOG = [
+    ['v139', [
+      '联机结算新增返回大厅退出键',
+      '右上退出键在结算弹层上可正常点',
+      '攻击光圈下移拳口中心并减细'
+    ]],
     ['v136', [
       '修分享到世界后客户端首次加入偶发失败',
       'AI观战等待阶段即隐藏触控操作键',
