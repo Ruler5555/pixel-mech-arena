@@ -50,10 +50,15 @@ function buildIceServers() {
       fetch(METERED_TURN_API, { cache: 'no-store' })
         .then((r) => r.json())
         .then((servers) => {
-          const arr = Array.isArray(servers) ? servers : [];
-          const turn = arr.filter((s) => s && /turn:/.test(s.urls || ''));
+          // Metered 在 key 无效/无权限时返回 {error:...} 而非数组 → 立即回退静态, 不卡死
+          if (!servers || servers.error || !Array.isArray(servers) || servers.length === 0) {
+            progress('TURN 动态获取失败(无有效凭据), 用静态兜底');
+            fallback();
+            return;
+          }
+          const turn = servers.filter((s) => s && /turn:/.test(s.urls || ''));
           progress('TURN 服务已获取(' + turn.length + '条)');
-          ok({ iceServers: [...STUN_SERVERS, ...arr], iceTransportPolicy: 'all' });
+          ok({ iceServers: [...STUN_SERVERS, ...servers], iceTransportPolicy: 'all' });
         })
         .catch(() => { progress('TURN 动态获取失败, 用静态兜底'); fallback(); });
     } catch (e) { fallback(); }
