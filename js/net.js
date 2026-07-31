@@ -13,28 +13,32 @@
 //   故仅作"能连上但卡"的最后手段, 绝不静默接管。
 
 // ⚠️ 跨网能玩的关键: 必须有一个「活的」TURN 服务器做 NAT 穿透。
-// v152 起改用 Metered REST API **动态拉取** TURN 凭据(用户账户 zmrly5555):
-//   GET https://zmrly5555.metered.live/api/v1/turn/credentials?apiKey=...
+// v153 起改用 Metered REST API **动态拉取** TURN 凭据(用户账户 zmrly5555):
+//   GET https://zmrly5555.metered.live/api/v1/turn/credentials?apiKey=...&region=singapore
 //   → 返回完整 iceServers 数组(含正确 TURN 主机+用户名+密码, 每次会话都是新鲜的, 不会过期)
-//   这解决了此前硬编码静态凭据可能过期、以及 TURN 主机名靠猜(v150 误填导致 DNS 不存在)的两类问题。
-// 动态拉取失败(网络/CORS)时回退到下方 TURN_SERVERS_FALLBACK(用户 Metered 静态凭据)。
-// 没有可用 TURN 时, 跨网只能走 MQTT 中继(≈500ms, 见 switchToRelay)——这是目前唯一跨网通道。
-const METERED_TURN_API = 'https://zmrly5555.metered.live/api/v1/turn/credentials?apiKey=5dda66de41e9bb5aa384ffa0da11cf947eab';
+//   &region=singapore 指定新加坡节点(对国内延迟最低 ~50-80ms, 远优于欧洲 ~300-500ms)
+// v153 关键修正: 此前硬编码的 TURN 主机名 global.turn.server.at 是错的(非 Metered 生产域名),
+//   正确域名是 global.relay.metered.ca(Metered 官方文档/博客确认, Azure Traffic Manager 路由)。
+//   这就是之前跨网 TURN 一直不工作的根因——连的根本不是你账户的 TURN 服务器。
+// 动态拉取失败(网络/CORS/API key 无效)时回退到下方 TURN_SERVERS_FALLBACK(正确域名 + 静态凭据)。
+const METERED_TURN_API = 'https://zmrly5555.metered.live/api/v1/turn/credentials?apiKey=5dda66de41e9bb5aa384ffa0da11cf947eab&region=singapore';
 const TURN_SERVERS_FALLBACK = [
-  // 静态兜底(REST API 不可达时): 此前用户提供的 Metered 静态凭据
-  // 主机名 global.turn.server.at 经 DNS 实测可解析; 443(TLS) 跨境穿透最稳
-  { urls: 'turns:global.turn.server.at:443?transport=tcp', username: '425449aea566e68b32d835d0', credential: 'GUKibG6xmWU+XF+t' },
-  { urls: 'turn:global.turn.server.at:443?transport=tcp', username: '425449aea566e68b32d835d0', credential: 'GUKibG6xmWU+XF+t' },
-  { urls: 'turn:global.turn.server.at:3478?transport=tcp', username: '425449aea566e68b32d835d0', credential: 'GUKibG6xmWU+XF+t' },
-  { urls: 'turn:global.turn.server.at:3478', username: '425449aea566e68b32d835d0', credential: 'GUKibG6xmWU+XF+t' }
+  // 静态兜底(REST API 不可达时): 用户 Metered 静态凭据 + 正确域名 global.relay.metered.ca
+  // ⚠️ v153 修正: 之前用 global.turn.server.at 是错误域名(非 Metered 生产服务), 改为官方域名
+  // 端口优先级: 443(TLS) > 443(TCP) > 80(TCP) > 80(UDP) —— 443 跨境防火墙穿透最稳
+  { urls: 'turns:global.relay.metered.ca:443?transport=tcp', username: '425449aea566e68b32d835d0', credential: 'GUKibG6xmWU+XF+t' },
+  { urls: 'turn:global.relay.metered.ca:443?transport=tcp', username: '425449aea566e68b32d835d0', credential: 'GUKibG6xmWU+XF+t' },
+  { urls: 'turn:global.relay.metered.ca:443', username: '425449aea566e68b32d835d0', credential: 'GUKibG6xmWU+XF+t' },
+  { urls: 'turn:global.relay.metered.ca:80?transport=tcp', username: '425449aea566e68b32d835d0', credential: 'GUKibG6xmWU+XF+t' },
+  { urls: 'turn:global.relay.metered.ca:80', username: '425449aea566e68b32d835d0', credential: 'GUKibG6xmWU+XF+t' }
 ];
 const STUN_SERVERS = [
+  { urls: 'stun:stun.relay.metered.ca:80' },
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
   { urls: 'stun:stun2.l.google.com:19302' },
   { urls: 'stun:stun3.l.google.com:19302' },
   { urls: 'stun:stun4.l.google.com:19302' },
-  { urls: 'stun:global.stun.twilio.com:3478' },
   { urls: 'stun:stun.qq.com:3478' },
   { urls: 'stun:stun.miwifi.com:3478' }
 ];
