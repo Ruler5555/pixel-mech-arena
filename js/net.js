@@ -1,9 +1,11 @@
-// net.js · 网络层: PeerJS P2P(主) + WebSocket 中继(备选)
+// net.js · 网络层: PeerJS P2P(主, 优先) + WebSocket 中继(并行备用·保联机房)
+// 设计原则: P2P 直连优先(同 WiFi/局域网 10~30ms, 跨网经 TURN 真·P2P 亦远低于境外 broker 中继);
+//   中继仅作"保联机房"兜底——P2P 宽限(20s)内未连上才并行启用中继且不放弃 P2P, P2P 迟到自动接管.
 // 改进点:
-//   1. 多 STUN 服务器,提升 NAT 穿透成功率
+//   1. 多 STUN + 免费 TURN(openrelay.metered.ca) 提升 NAT 穿透成功率(对称 NAT 也能真·P2P)
 //   2. 信令断线自动重连(peer.disconnected -> reconnect)
 //   3. 连接超时检测 + 详细错误类型回调
-//   4. 提供 relay 模式(ntfy.sh 免费 pub/sub),P2P 失败时备选
+//   4. P2P 优先 / 中继并行备用: send() 永远 P2P 优先, 双通道同发同序号, 接收端去重防回跳
 
 // TURN 配置槽: 用于"对称 NAT"兜底——无 TURN 时这类网络会退回公共 broker 中继(200ms+ 高延迟)
 // 根治方案: 部署自托管 coturn(见仓库 deploy/turn/ 目录的 docker-compose 与说明),
@@ -88,16 +90,12 @@ const Net = (() => {
         resolve(code);
       };
       let relayStarted = false;
-      const toRelay = () => {
+      // [P2P 优先·并行备用] 不放弃 P2P, 仅并行启动中继作为"保联机房"兜底;
+      // P2P 后续连入会自动接管(send 优先 P2P), 故中继延迟尖刺只在 P2P 真正不可达时出现
+      const toRelayBackup = () => {
         if (relayStarted) return;
         relayStarted = true;
-        progress('P2P 信令不可用, 切换中继模式...');
-        mode = 'relay';
-        relayTopic = 'pma26/' + roomCode;
-        _relayConnect(roomCode, () => finish(roomCode), () => {
-          progress('中继连接失败, 请检查网络后重试');
-          reject(new Error('中继连接失败'));
-        });
+        _startRelayBackup(roomCode, () => finish(roomCode));
       };
       try {
         peer = new Peer(PEER_PREFIX + roomCode, { debug: 1, config: ICE_SERVERS });
@@ -106,18 +104,19 @@ const Net = (() => {
       peer.on('open', () => {
         progress('信令已就绪, 等待对手...');
         finish(roomCode);
-        // [跨网兜底] 信令就绪后给 P2P(含 TURN 中继)充足时间建连, 15s 内无对手经 P2P 连入才转中继
-        // 内置免费 TURN(openrelay.metered.ca)后, 对称 NAT 也能在 1~3s 走 TURN 真·P2P 建连, 定时器极少触发;
-        // 同网/可直连更在 1s 内连上 → 不再像 v80 那样 6s 盲转中继把同网 P2P 杀掉
-        connectDeadline = setTimeout(() => { if (!conn || !conn.open) toRelay(); }, 15000);
+        // [P2P 优先·长宽限] 用户明确要求"宁等多几秒也要 P2P", 给 P2P(含 TURN)充足建连时间,
+        // 20s 内无对手经 P2P 连入才并行启动中继备用(不放弃 P2P); 内置免费 TURN 后对称 NAT 1~3s 即建连
+        connectDeadline = setTimeout(() => { if (!conn || !conn.open) toRelayBackup(); }, 20000);
       });
 
       peer.on('connection', (c) => {
         clearTimeout(connectDeadline); // P2P 连入即取消中继兜底定时器
-        if (conn && conn.open) { c.close(); return; }
-        // 若已切到中继且中继已连, 忽略 P2P 连接(以中继为准)
-        if (mode === 'relay' && mqttClient && mqttClient.connected) { c.close(); return; }
+        if (conn && conn.open && conn !== c) { c.close(); return; } // 已有直连, 丢弃重复
+        // [P2P 优先] 即便已并行启用中继备用通道, 只要 P2P 直连连入就优先接管
+        // (用户诉求: 中继延迟 800ms 没法玩, 能走 P2P 一律走 P2P, 中继仅"保联机房")
         conn = c;
+        mode = 'p2p';
+        progress('P2P 直连已建立, 优先使用低延迟通道');
         bindConn(c);
       });
 
@@ -133,13 +132,13 @@ const Net = (() => {
           setTimeout(() => _p2pHost().then(resolve, reject), 200);
           return;
         }
-        // 其他错误(含信令服务器被墙/不可达): 自动切中继
-        progress('信令错误: ' + err.type + ', 切换中继...');
-        if (!resolved) toRelay();
+        // 其他错误(含信令服务器被墙/不可达): 并行启用中继备用(保留 P2P 重试)
+        progress('信令错误: ' + err.type + ', 启用中继备用...');
+        if (!resolved) toRelayBackup();
       });
 
-      // 兜底: 4 秒内信令仍未就绪(如 peerjs 云被墙), 直接切中继, 避免无限等待
-      setTimeout(() => { if (!resolved) toRelay(); }, 4000);
+      // 兜底: 4 秒内信令仍未就绪(如 peerjs 云被墙), 并行启用中继备用, 避免无限等待
+      setTimeout(() => { if (!resolved) toRelayBackup(); }, 4000);
     });
   }
 
@@ -153,30 +152,34 @@ const Net = (() => {
       role = 'client';
       roomCode = code;
       progress('正在连接信令服务器...');
+      let resolved = false;
+      const finish = (c) => { if (resolved) return; resolved = true; _startKeepAlive(); resolve(c); };
       try {
         peer = new Peer({ debug: 1, config: ICE_SERVERS });
       } catch (e) { reject(e); return; }
 
       peer.on('open', () => {
-        progress('信令已就绪,正在连接主机...');
-        _startKeepAlive();
+        progress('信令已就绪,正在连接主机(P2P 直连优先)...');
         // [稳定性修复] reliable:true(有序可靠通道): 旧版不可靠通道会静默丢失 start/reset
         // 等关键控制消息, 导致"主机点了开始/重开, 客户端没反应"; 状态包小且 30Hz, 可靠通道足够流畅
         conn = peer.connect(PEER_PREFIX + code, { reliable: true, serialization: 'json' });
         bindConn(conn);
 
-        // P2P 建立超时检测: 给 TURN/STUN 充足握手时间(10s), 内置免费 TURN 后多数跨网 1~3s 即建连
+        // [P2P 优先·长宽限] 给 TURN/STUN 充足握手时间(20s): 用户明确要求"宁等多几秒也要 P2P",
+        // 内置免费 TURN 后多数跨网 1~3s 即建连, 20s 宽限内未连上才并行启动中继备用(不放弃 P2P)
         clearTimeout(connectDeadline);
         connectDeadline = setTimeout(() => {
           if (!conn || !conn.open) {
-            progress('P2P 连接超时(可能 NAT 穿透失败),尝试中继模式...');
-            _fallbackToRelay(code, resolve, reject);
+            progress('P2P 直连较慢, 启用中继备用通道(保联机房)...');
+            _startRelayBackup(code, () => finish(code));
           }
-        }, 10000);
+        }, 20000);
 
         conn.on('open', () => {
           clearTimeout(connectDeadline);
-          resolve(code);
+          if (!resolved) finish(code);
+          mode = 'p2p'; // [P2P 优先] 即便中继已连, 直连就绪即接管
+          progress('P2P 直连已建立, 优先使用低延迟通道');
         });
       });
 
@@ -189,8 +192,8 @@ const Net = (() => {
         if (err.type === 'peer-unavailable') {
           reject(new Error('房间不存在或已关闭'));
         } else {
-          progress('错误: ' + err.type + ',尝试中继...');
-          _fallbackToRelay(code, resolve, reject);
+          progress('错误: ' + err.type + ',启用中继备用...');
+          _startRelayBackup(code, () => finish(code));
         }
       });
     });
@@ -253,9 +256,12 @@ const Net = (() => {
     });
     c.on('close', () => {
       lastP2pRecv = 0; // P2P 断开
-      // [v77 修正] 仅在 P2P 真正断开时懒启动中继兜底(平时不常驻境外通道, 避免延迟尖刺)
-      // 若中继已连(初始失败回退场景)则静默切换; 否则懒启动中继, 失败才报连接中断
-      if (mqttClient && mqttClient.connected) { progress('P2P 断开, 已自动切至中继通道'); return; }
+      // [P2P 优先·并行备用] 若中继已连(并行备用场景)则静默回落中继; 否则懒启动中继兜底
+      if (mqttClient && mqttClient.connected) {
+        mode = 'relay';
+        progress('P2P 断开, 自动回落中继备用通道(保联机房)');
+        return;
+      }
       if (roomCode) { progress('P2P 断开, 尝试中继兜底...'); _fallbackToRelay(roomCode, () => {}, () => emit('close')); return; }
       emit('close');
     });
@@ -283,6 +289,22 @@ const Net = (() => {
     mode = 'relay';
     relayTopic = 'pma26/' + code;
     _relayConnect(code, resolve, reject);
+  }
+
+  // [P2P 优先·并行备用] 不销毁 P2P, 仅并行启动中继作为"保联机房"兜底.
+  // 与 _fallbackToRelay(彻底放弃 P2P) 不同: 此函数保留 P2P 握手, P2P 后续连入会自动接管
+  // (send 优先 P2P), 故中继延迟尖刺只在 P2P 真正不可达时才出现. 双方都连上后中继变空闲备份,
+  // P2P 断开瞬间无缝回落中继(双通道同发同序号, 接收端去重防回跳/重复出招).
+  function _startRelayBackup(code, resolve) {
+    if (mqttClient && mqttClient.connected) { if (resolve) resolve(code); return; }
+    mode = (conn && conn.open) ? 'p2p' : 'relay';
+    relayTopic = 'pma26/' + code;
+    progress('P2P 直连建立中, 已并行启用中继备用通道');
+    _relayConnect(code, resolve, () => {
+      // 中继备用也连不上: 退回纯 P2P, P2P 后续断开时会再尝试兜底
+      progress('中继备用不可用, 仅保留 P2P 直连');
+      mode = (conn && conn.open) ? 'p2p' : 'relay';
+    });
   }
 
   function _relayConnect(code, resolve, reject) {
