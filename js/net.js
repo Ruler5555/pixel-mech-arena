@@ -22,8 +22,14 @@
 const TURN_SERVERS = [
   // Metered.ca 用户专属 TURN(跨网 NAT 穿透, 真·P2P, 延迟远低于 MQTT 中继)
   // 凭据由用户账户提供, 可随时在 Metered 后台 Revoke 重置(仓库公开, 此为其固有可见性)
+  // ⚠️ 端口优先级(国内防火墙现实): 443(TLS) > 80 > 3478
+  //   - 3478(udp/tcp) 跨境常被干扰导致 TURN 分配失败 → 对称 NAT 连不上("加不进房间")
+  //   - 443 是 HTTPS 端口几乎必通, turns:(TLS) 跨境穿透最稳 → 提最高优先级
+  { urls: 'turns:global.turn.server.at:443?transport=tcp', username: '425449aea566e68b32d835d0', credential: 'GUKibG6xmWU+XF+t' },
+  { urls: 'turn:global.turn.server.at:443?transport=tcp', username: '425449aea566e68b32d835d0', credential: 'GUKibG6xmWU+XF+t' },
+  { urls: 'turn:global.turn.server.at:80?transport=tcp', username: '425449aea566e68b32d835d0', credential: 'GUKibG6xmWU+XF+t' },
   { urls: 'turn:global.turn.server.at:3478?transport=tcp', username: '425449aea566e68b32d835d0', credential: 'GUKibG6xmWU+XF+t' },
-  { urls: 'turn:global.turn.server.at:3478?transport=udp', username: '425449aea566e68b32d835d0', credential: 'GUKibG6xmWU+XF+t' }
+  { urls: 'turn:global.turn.server.at:3478', username: '425449aea566e68b32d835d0', credential: 'GUKibG6xmWU+XF+t' }
 ];
 const ICE_SERVERS = {
   iceServers: [
@@ -261,6 +267,10 @@ const Net = (() => {
       _startPingMonitor();
       try { c.send({ t: 'hello', n: playerName, q: ++sendSeq }); } catch (e) {}
     });
+    // ICE 状态诊断: 跨网连不上时据此判断是 NAT 穿透失败还是 TURN 不可用
+    if (c.on) {
+      try { c.on('iceStateChanged', (s) => { if (s === 'failed' || s === 'disconnected') progress('NAT 穿透失败, 需 TURN/中继'); else progress('网络状态: ' + s); }); } catch (e) {}
+    }
     c.on('data', (msg) => {
       if (!msg || !msg.t) return;
       if (msg.t === 'hello') { _handleHello(msg, 'p2p'); return; }
