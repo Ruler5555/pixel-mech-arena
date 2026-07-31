@@ -1068,6 +1068,10 @@
   // ===== 更新公告: 点击版本号显示近三次更新(倒序: 最新在前; 每条用短句概括改动, 一点一换行; 每次发版须 prepend 一条真实版本) =====
   // 文案规则: 每条不超过 30 字, 一条一个圆点, 折行不再出点(见 .cl-pt 悬挂缩进)
   const CHANGELOG = [
+    ['v154', [
+      '紧急修复: buildIceServers误用模块内progress()致建房卡死',
+      'TURN域名修正(v153)+本修复后建房/跨网应恢复正常'
+    ]],
     ['v153', [
       '修正TURN域名: global.turn.server.at→global.relay.metered.ca(官方正确域名)',
       'API加&region=singapore指定亚洲节点; STUN加Metered自有stun.relay.metered.ca'

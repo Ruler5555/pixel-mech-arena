@@ -56,18 +56,18 @@ function buildIceServers() {
         .then((servers) => {
           // Metered 在 key 无效/无权限时返回 {error:...} 而非数组 → 立即回退静态, 不卡死
           if (!servers || servers.error || !Array.isArray(servers) || servers.length === 0) {
-            progress('TURN 动态获取失败(无有效凭据), 用静态兜底');
+            console.log('[TURN] 动态获取失败(无有效凭据), 用静态兜底');
             fallback();
             return;
           }
           const turn = servers.filter((s) => s && /turn:/.test(s.urls || ''));
-          progress('TURN 服务已获取(' + turn.length + '条)');
+          console.log('[TURN] 服务已获取(' + turn.length + '条)');
           ok({ iceServers: [...STUN_SERVERS, ...servers], iceTransportPolicy: 'all' });
         })
-        .catch(() => { progress('TURN 动态获取失败, 用静态兜底'); fallback(); });
+        .catch(() => { console.log('[TURN] 动态获取失败, 用静态兜底'); fallback(); });
     } catch (e) { fallback(); }
     // 兜底超时: 若 API 卡死(无网络), 5s 后用静态兜底, 不阻塞连接
-    setTimeout(() => { if (!done) { progress('TURN 获取超时, 用静态兜底'); fallback(); } }, 5000);
+    setTimeout(() => { if (!done) { console.log('[TURN] 获取超时, 用静态兜底'); fallback(); } }, 5000);
   });
 }
 
