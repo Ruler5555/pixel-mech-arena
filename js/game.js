@@ -100,8 +100,10 @@ function makeAI(cfg) {
       }
 
       // 空中二段跳: 所有会跳的风格在一段跳后按 airJumpProb 补跳, 立体机动更明显
+      // [v133] 触发概率从 *0.12 提到 *0.55(原压制过狠导致二段跳极少发生),
+      // 且真正触发时几乎必带水平位移(见下方 airJump 分支), 不再"纯垂直呆跳"
       if (!self.onGround && self.jumpCount === 1 && cfg.airJumpProb > 0 && !this._last.jump
-          && Math.random() < cfg.airJumpProb * 0.12) {
+          && Math.random() < cfg.airJumpProb * 0.55) {
         this.decision = 'airJump';
       }
 
@@ -116,10 +118,22 @@ function makeAI(cfg) {
           break;
         case 'defend': ctrl.defend = true; break; // 持续按住, 直到下次重掷
         case 'jump':
-          if (!this._last.jump && self.onGround && self.jumpCount < 2) { ctrl.tapJump = true; this.decision = 'idle'; }
+          if (!this._last.jump && self.onGround && self.jumpCount < 2) {
+            ctrl.tapJump = true; this.decision = 'idle';
+            // 起跳带水平位移: 多数风格朝对手扑(进攻跳), 游击/铁壁偏后撤, 让跳跃更自然不呆板
+            const jdir = (cfg.id === 'skirmisher' || cfg.id === 'bulwark') ? -dir : dir;
+            if (Math.random() < 0.85) { if (jdir > 0) ctrl.right = true; else ctrl.left = true; }
+          }
           break;
         case 'airJump':
-          if (!self.onGround && self.jumpCount < 2) { ctrl.tapJump = true; this.decision = 'idle'; }
+          if (!self.onGround && self.jumpCount < 2) {
+            ctrl.tapJump = true; this.decision = 'idle';
+            // 二段跳几乎必带水平位移, 且按风格决定扑/撤 —— 杜绝"纯垂直呆跳"
+            const adir = (cfg.id === 'skirmisher') ? -dir
+                       : (cfg.id === 'berserker' || cfg.id === 'gale') ? dir
+                       : (Math.random() < 0.5 ? dir : -dir);
+            if (Math.random() < 0.92) { if (adir > 0) ctrl.right = true; else ctrl.left = true; }
+          }
           break;
         case 'evade':
           // 后跳逃离: 地面先起跳, 空中补二段跳

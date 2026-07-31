@@ -247,6 +247,7 @@
     modeSelect.classList.add('hidden');
     onlineModeSelect.classList.add('hidden');
     aiPickScreen.classList.remove('hidden');
+    document.body.classList.add('ai-spectate'); // AI 观战(含选风格阶段): 隐藏触控操作键
     leaveGame();
     hideOverlay();
     renderAIPresets();
@@ -378,6 +379,7 @@
   function showRoomLobby(code, opts) {
     opts = opts || {};
     currentRoomCode = code;
+    document.body.classList.remove('ai-spectate'); // 退出 AI 选风格屏返回等待大厅: 恢复触控键
     lobby.classList.add('hidden');
     gameWrap.classList.add('hidden');
     onlineHub.classList.add('hidden');
@@ -1022,6 +1024,11 @@
   // ===== 更新公告: 点击版本号显示近三次更新(倒序: 最新在前; 每条用短句概括改动, 一点一换行; 每次发版须 prepend 一条真实版本) =====
   // 文案规则: 每条不超过 30 字, 一条一个圆点, 折行不再出点(见 .cl-pt 悬挂缩进)
   const CHANGELOG = [
+    ['v133', [
+      '修中继进房主机不刷新+客户端断重连',
+      'AI选风格屏即隐藏触控操作键',
+      'AI二段跳带水平位移且频率更高'
+    ]],
     ['v130', [
       '修AI选风格客户端确认主机收不到',
       '选风格屏新增返回大厅键(同等待大厅)'
