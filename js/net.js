@@ -13,24 +13,24 @@
 //   故仅作"能连上但卡"的最后手段, 绝不静默接管。
 
 // ⚠️ 跨网能玩的关键: 必须有一个「活的」TURN 服务器做 NAT 穿透。
-// v153 起改用 Metered REST API **动态拉取** TURN 凭据(用户账户 zmrly5555):
+// v155 起改用 Metered REST API **动态拉取** TURN 凭据(用户账户 zmrly5555):
 //   GET https://zmrly5555.metered.live/api/v1/turn/credentials?apiKey=...&region=singapore
 //   → 返回完整 iceServers 数组(含正确 TURN 主机+用户名+密码, 每次会话都是新鲜的, 不会过期)
 //   &region=singapore 指定新加坡节点(对国内延迟最低 ~50-80ms, 远优于欧洲 ~300-500ms)
-// v153 关键修正: 此前硬编码的 TURN 主机名 global.turn.server.at 是错的(非 Metered 生产域名),
-//   正确域名是 global.relay.metered.ca(Metered 官方文档/博客确认, Azure Traffic Manager 路由)。
-//   这就是之前跨网 TURN 一直不工作的根因——连的根本不是你账户的 TURN 服务器。
-// 动态拉取失败(网络/CORS/API key 无效)时回退到下方 TURN_SERVERS_FALLBACK(正确域名 + 静态凭据)。
-const METERED_TURN_API = 'https://zmrly5555.metered.live/api/v1/turn/credentials?apiKey=5dda66de41e9bb5aa384ffa0da11cf947eab&region=singapore';
+// ⚠️ v155 关键修正(REST API 实测确认):
+//   1. 区域专属域名是 sg.relay.metered.ca(新加坡), 不是 global.relay.metered.ca!
+//      (凭据绑定新加坡区域服务器, 用 global 域名会 401)
+//   2. API key 更新为 4abe49...(zmrly321456 凭据的 key, 已验证有效)
+//   3. TURN 端口: 80(udp/tcp) + 443(udp) + 443(tls); STUN: stun.relay.metered.ca:80
+// 动态拉取失败(网络/CORS)时回退到下方 TURN_SERVERS_FALLBACK(同区域同凭据, 已验证可 Allocate)。
+const METERED_TURN_API = 'https://zmrly5555.metered.live/api/v1/turn/credentials?apiKey=4abe49e452ba47643a733c4b71c10063eac9&region=singapore';
 const TURN_SERVERS_FALLBACK = [
-  // 静态兜底(REST API 不可达时): 用户 Metered 静态凭据 + 正确域名 global.relay.metered.ca
-  // ⚠️ v153 修正: 之前用 global.turn.server.at 是错误域名(非 Metered 生产服务), 改为官方域名
-  // 端口优先级: 443(TLS) > 443(TCP) > 80(TCP) > 80(UDP) —— 443 跨境防火墙穿透最稳
-  { urls: 'turns:global.relay.metered.ca:443?transport=tcp', username: '425449aea566e68b32d835d0', credential: 'GUKibG6xmWU+XF+t' },
-  { urls: 'turn:global.relay.metered.ca:443?transport=tcp', username: '425449aea566e68b32d835d0', credential: 'GUKibG6xmWU+XF+t' },
-  { urls: 'turn:global.relay.metered.ca:443', username: '425449aea566e68b32d835d0', credential: 'GUKibG6xmWU+XF+t' },
-  { urls: 'turn:global.relay.metered.ca:80?transport=tcp', username: '425449aea566e68b32d835d0', credential: 'GUKibG6xmWU+XF+t' },
-  { urls: 'turn:global.relay.metered.ca:80', username: '425449aea566e68b32d835d0', credential: 'GUKibG6xmWU+XF+t' }
+  // 静态兜底(REST API 不可达时): 新加坡区域服务器 + zmrly321456 凭据(已用 TURN Allocate 实测验证有效)
+  // 端口顺序对齐 REST API 返回: 80 > 80tcp > 443 > 443tls
+  { urls: 'turn:sg.relay.metered.ca:80', username: '5bd3b785c789d8a13597e5bf', credential: 'VI7kyJaVnLrlIcLU' },
+  { urls: 'turn:sg.relay.metered.ca:80?transport=tcp', username: '5bd3b785c789d8a13597e5bf', credential: 'VI7kyJaVnLrlIcLU' },
+  { urls: 'turn:sg.relay.metered.ca:443', username: '5bd3b785c789d8a13597e5bf', credential: 'VI7kyJaVnLrlIcLU' },
+  { urls: 'turns:sg.relay.metered.ca:443?transport=tcp', username: '5bd3b785c789d8a13597e5bf', credential: 'VI7kyJaVnLrlIcLU' }
 ];
 const STUN_SERVERS = [
   { urls: 'stun:stun.relay.metered.ca:80' },
