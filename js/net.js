@@ -13,22 +13,23 @@
 //   故仅作"能连上但卡"的最后手段, 绝不静默接管。
 
 // ⚠️ 跨网能玩的关键: 必须有一个「活的」TURN 服务器做 NAT 穿透。
-// v158 起: region=global 自动就近路由(Metered 官方: Global 区域路由到离用户最近的服务器),
-//   对国内可能路由到香港/新加坡/日本, 比固定新加坡(sg)延迟更低, 对齐 v110 时代的体验。
+// v160 起: region=japan 日本节点(实测对国内 TCP 延迟最低 ~220ms, 优于 sg ~300-400 / global ~280-395)
+//   v158 曾用 region=global(就近路由), 但实测 global 对国内路由不佳(158.247.200.82), 用户测出 1500+ms。
 // v155 关键修正(REST API 实测确认):
-//   1. 凭据是账户级, global 和 sg 区域都能用(均 Allocate 实测成功)
+//   1. 凭据是账户级, 各区域都能用(global/sg/jp 均 Allocate 实测成功)
 //   2. API key 4abe49...(zmrly321456 凭据的 key, 已验证有效)
 //   3. TURN 端口: 80(udp/tcp) + 443(udp) + 443(tls); STUN: stun.relay.metered.ca:80
-// 动态拉取失败(网络/CORS)时回退到下方 TURN_SERVERS_FALLBACK(global 优先 + sg 兜底, 均已验证可 Allocate)。
-const METERED_TURN_API = 'https://zmrly5555.metered.live/api/v1/turn/credentials?apiKey=4abe49e452ba47643a733c4b71c10063eac9&region=global';
+// 动态拉取失败(网络/CORS)时回退到下方 TURN_SERVERS_FALLBACK(jp 优先 + sg/global 兜底, 均已验证可 Allocate)。
+const METERED_TURN_API = 'https://zmrly5555.metered.live/api/v1/turn/credentials?apiKey=4abe49e452ba47643a733c4b71c10063eac9&region=japan';
 const TURN_SERVERS_FALLBACK = [
-  // 静态兜底(REST API 不可达时): global 就近路由优先 + 新加坡兜底(凭据 5bd3b7... 两者均 Allocate 实测成功)
-  { urls: 'turn:global.relay.metered.ca:80', username: '5bd3b785c789d8a13597e5bf', credential: 'VI7kyJaVnLrlIcLU' },
-  { urls: 'turn:global.relay.metered.ca:80?transport=tcp', username: '5bd3b785c789d8a13597e5bf', credential: 'VI7kyJaVnLrlIcLU' },
-  { urls: 'turn:global.relay.metered.ca:443', username: '5bd3b785c789d8a13597e5bf', credential: 'VI7kyJaVnLrlIcLU' },
-  { urls: 'turns:global.relay.metered.ca:443?transport=tcp', username: '5bd3b785c789d8a13597e5bf', credential: 'VI7kyJaVnLrlIcLU' },
+  // 静态兜底(REST API 不可达时): 日本优先(实测延迟最低) + 新加坡/global 兜底(凭据 5bd3b7... 均 Allocate 实测成功)
+  { urls: 'turn:jp.relay.metered.ca:80', username: '5bd3b785c789d8a13597e5bf', credential: 'VI7kyJaVnLrlIcLU' },
+  { urls: 'turn:jp.relay.metered.ca:80?transport=tcp', username: '5bd3b785c789d8a13597e5bf', credential: 'VI7kyJaVnLrlIcLU' },
+  { urls: 'turn:jp.relay.metered.ca:443', username: '5bd3b785c789d8a13597e5bf', credential: 'VI7kyJaVnLrlIcLU' },
+  { urls: 'turns:jp.relay.metered.ca:443?transport=tcp', username: '5bd3b785c789d8a13597e5bf', credential: 'VI7kyJaVnLrlIcLU' },
   { urls: 'turn:sg.relay.metered.ca:80', username: '5bd3b785c789d8a13597e5bf', credential: 'VI7kyJaVnLrlIcLU' },
-  { urls: 'turn:sg.relay.metered.ca:443', username: '5bd3b785c789d8a13597e5bf', credential: 'VI7kyJaVnLrlIcLU' }
+  { urls: 'turn:sg.relay.metered.ca:443', username: '5bd3b785c789d8a13597e5bf', credential: 'VI7kyJaVnLrlIcLU' },
+  { urls: 'turn:global.relay.metered.ca:80', username: '5bd3b785c789d8a13597e5bf', credential: 'VI7kyJaVnLrlIcLU' }
 ];
 const STUN_SERVERS = [
   { urls: 'stun:stun.relay.metered.ca:80' },
