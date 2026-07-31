@@ -155,10 +155,10 @@
       if (game.mode === 'offline') {
         el.textContent = '离线 vs AI';
       } else if (game.mode === 'host' || game.mode === 'aiHost') {
-        const m = Net.getMode() === 'relay' ? '中继' : 'P2P';
+        const m = Net.getStateChannel() === 'relay' ? '中继' : 'P2P';
         el.textContent = (game.mode === 'aiHost' ? 'AI房主 · ' : '主机 · ') + (Net.isConnected() ? m : m + ' 等待中');
       } else if (game.mode === 'client' || game.mode === 'aiClient') {
-        const m = Net.getMode() === 'relay' ? '中继' : 'P2P';
+        const m = Net.getStateChannel() === 'relay' ? '中继' : 'P2P';
         el.textContent = (game.mode === 'aiClient' ? 'AI观战 · ' : '客户端 · ') + (Net.isConnected() ? m : m + ' 重连中');
       }
     };
@@ -1042,6 +1042,10 @@
   // ===== 更新公告: 点击版本号显示近三次更新(倒序: 最新在前; 每条用短句概括改动, 一点一换行; 每次发版须 prepend 一条真实版本) =====
   // 文案规则: 每条不超过 30 字, 一条一个圆点, 折行不再出点(见 .cl-pt 悬挂缩进)
   const CHANGELOG = [
+    ['v142', [
+      '联机跨网卡顿修复: 状态走双通道不再冻结',
+      '右上延迟改显实际通道(不再乱跳)'
+    ]],
     ['v141', [
       '联机AI对战血量上限升至120',
       '联机AI对战每回合缩短为30秒'

@@ -58,7 +58,10 @@ const Net = (() => {
   let sendSeq = 0;     // 发送序号
   let lastRecvSeq = 0; // 已处理的最大对端序号
   let lastP2pRecv = 0; // 最近一次收到 P2P 包的时间(ms), 用于判断 P2P 是否停滞
-  let rtt = 0;          // 最近一次往返时延(ms), 由 ping/pong 测量
+  let rtt = 0;          // [保留] 兼容旧引用; 实际改用 p2pRtt / relayRtt + lastStateChannel
+  let p2pRtt = 0;       // P2P 通道往返时延(ms)
+  let relayRtt = 0;     // 中继通道往返时延(ms)
+  let lastStateChannel = 'p2p'; // 最近一次承载 gameplay state 的通道(P2P 优先, P2P 死则中继)
   let pingTimer = null; // 周期性 ping 定时器
 
   // [致命修复] 旧版事件表漏了 reset/resync 键: on('reset')/on('resync') 注册进的是
@@ -236,7 +239,14 @@ const Net = (() => {
   function _sendPing() { if (isConnected()) send({ t: 'ping', ts: Date.now() }); }
   function _startPingMonitor() { clearInterval(pingTimer); pingTimer = setInterval(_sendPing, 1000); }
   function _stopPingMonitor() { clearInterval(pingTimer); pingTimer = null; }
-  function getRtt() { return rtt; }
+  // 有效延迟 = 当前实际承载 gameplay state 的通道往返时延(而非 ping 所在通道),
+  // 避免 P2P↔中继切换时右上角数字无意义乱跳; 你看到的即你实际感受到的延迟
+  function getRtt() {
+    if (lastStateChannel === 'relay' && relayRtt > 0) return relayRtt;
+    if (p2pRtt > 0) return p2pRtt;
+    return relayRtt; // 极端情况: 仅中继连上时也能显示
+  }
+  function getStateChannel() { return lastStateChannel; }
 
   // 序号判定: 只接受比已见更新的消息; 对端刷新页面后序号会从头开始, 差距悬殊时视为新会话
   function _acceptSeq(msg) {
@@ -263,8 +273,9 @@ const Net = (() => {
     emit('connected', payload || { name: '' });
   }
   // 通用消息路由(P2P 与中继共用)
-  function _routeMsg(msg) {
-    if (msg.t === 'state')       emit('state', msg.s);
+  function _routeMsg(msg, ch) {
+    ch = ch || 'p2p';
+    if (msg.t === 'state')       { lastStateChannel = ch; emit('state', msg.s); }
     else if (msg.t === 'input')  emit('input', msg.c);
     else if (msg.t === 'bye')    emit('close');
     else if (msg.t === 'reset')  emit('reset');
@@ -276,7 +287,7 @@ const Net = (() => {
     else if (msg.t === 'aips')   emit('aipickstart');                            // host 点「进入选风格」: 双方一起进选风格屏
     else if (msg.t === 'aicxl')  emit('aicancel');                               // host 从选风格屏退回等待大厅
     else if (msg.t === 'ping')  { send({ t: 'pong', ts: msg.ts }); } // 收到 ping 立即回 pong
-    else if (msg.t === 'pong')  { const r = Date.now() - (msg.ts || 0); if (r >= 0 && r < 10000) rtt = r; } // 计算 RTT
+    else if (msg.t === 'pong')  { const r = Date.now() - (msg.ts || 0); if (r >= 0 && r < 10000) { if (ch === 'p2p') p2pRtt = r; else relayRtt = r; } } // 按通道计 RTT
   }
 
   function bindConn(c) {
@@ -291,7 +302,7 @@ const Net = (() => {
       if (!_acceptSeq(msg)) return;
       lastP2pRecv = Date.now(); // 标记 P2P 活跃, 用于自适应路由判定
       if (msg.t === 'hello') _emitConnected({ name: msg.n || '' });
-      else _routeMsg(msg);
+      else _routeMsg(msg, 'p2p');
     });
     c.on('close', () => {
       lastP2pRecv = 0; // P2P 断开
@@ -426,7 +437,7 @@ const Net = (() => {
           } else {
             // 游戏消息统一走去重(hello/world 握手消息不去重, 允许重发)
             if (!_acceptSeq(msg)) return;
-            _routeMsg(msg);
+            _routeMsg(msg, 'relay');
           }
         } catch (e) {}
       });
@@ -491,7 +502,11 @@ const Net = (() => {
     // "再来一局"主机收不到。状态包(state)只走 P2P, 省中继带宽、保留 v119 中继降码率成果。
     if (viaP2P && viaRelay) {
       if (obj.t === 'state') {
+        // [v142 修复] state 也走双通道冗余: P2P 与中继各发一份, 接收端按序号去重(最新帧胜).
+        // 跨网 P2P 卡死/半死时, 中继无缝接管 gameplay state, client 不再冻结;
+        // P2P 存活(更低延迟)时自然胜出, 中继仅作"保联机房"兜底, 不违背 P2P 优先原则.
         try { conn.send(obj); } catch (e) {}
+        _relaySend(obj);
       } else {
         try { conn.send(obj); } catch (e) {}
         _relaySend(obj);
@@ -548,6 +563,6 @@ const Net = (() => {
     on, hostRoom, joinRoom, hostRelay, joinRelay,
     sendState, sendInput, sendReset, sendBye, sendStart, sendRematchReady,
     sendAiMode, sendAiPick, sendAiStart, sendAiPickStart, sendAiCancel,
-    setName, getRole, isConnected, getRoomCode, getMode, getRtt, close
+    setName, getRole, isConnected, getRoomCode, getMode, getRtt, getStateChannel, close
   };
 })();
