@@ -91,7 +91,6 @@
   const ovText = document.getElementById('overlayText');
   const startBtn = document.getElementById('startBtn');
   const cancelBtn = document.getElementById('cancelBtn');
-  const relayBtn = document.getElementById('relayBtn');
   const modeTag = document.getElementById('gameModeTag');
 
   let exitConfirmMode = false;
@@ -520,7 +519,6 @@
   function showOverlay(title, text, btn, opts) {
     opts = opts || {};
     overlay.classList.remove('hidden');
-    if (relayBtn) relayBtn.classList.add('hidden');
     ovTitle.textContent = title;
     ovText.textContent = text || '';
     startBtn.textContent = btn || '开始';
@@ -530,19 +528,6 @@
   }
   function hideOverlay() {
     overlay.classList.add('hidden');
-    if (relayBtn) { relayBtn.classList.add('hidden'); relayBtn.onclick = null; }
-  }
-  // 网络选择弹层: 提示中继高延迟, 提供「切换中继」与「返回大厅」(显式兜底, 不静默接管)
-  function showNetChoice(title, msg, onRelay, onCancelChoice) {
-    showOverlay(title, msg, '', { cancelable: true, cancelLabel: '返回大厅' });
-    relayBtn.classList.remove('hidden');
-    relayBtn.textContent = '切换中继 (高延迟)';
-    relayBtn.onclick = () => { relayBtn.onclick = null; relayBtn.classList.add('hidden'); onRelay(); };
-    pendingNetAbort = () => {
-      relayBtn.onclick = null; relayBtn.classList.add('hidden');
-      pendingNetAbort = null;
-      if (onCancelChoice) onCancelChoice();
-    };
   }
 
   function backToLobby() {
@@ -877,7 +862,6 @@
   // 返回大厅/取消(只绑 click)
   const onCancel = (e) => {
     e.preventDefault();
-    if (pendingNetAbort) { const f = pendingNetAbort; pendingNetAbort = null; f(); return; }
     if (exitConfirmMode) {
       exitConfirmMode = false;
       hideOverlay();
@@ -927,7 +911,6 @@
 
   // ===== 联机事件绑定 =====
   let netBound = false;
-  let pendingNetAbort = null;
   function bindNetEvents() {
     if (netBound) return;
     netBound = true;
@@ -1035,16 +1018,6 @@
       showOverlay('连接已断开', '对局仅支持 P2P 直连通道。\n\n连接已中断, 请返回大厅重新加入。', '',
         { cancelable: true, cancelLabel: '返回大厅' });
     });
-    // 连接阶段 P2P 连不上: 自动重试耗尽后弹出「切换中继(高延迟)」按钮(显式兜底)
-    Net.on('relayOffered', () => {
-      if (game.mode === 'offline') return;
-      showNetChoice('P2P 直连失败', '无法与主机建立直连(P2P)。\n\n可切换中继通道(延迟≈500ms, 对战将严重卡顿、几乎不可玩); 或返回大厅。建议确认双方在同一网络/可直连。',
-        () => {
-          Net.switchToRelay();
-          showOverlay('切换中', '正在通过中继通道连接...', '', { cancelable: true, cancelLabel: '返回大厅' });
-        },
-        () => { hideOverlay(); Net.abortJoin(); Net.close(); });
-    });
     Net.on('error', () => { setStatus('网络错误,请重试', true); });
 
     Net.on('reset', () => {
@@ -1069,9 +1042,12 @@
   // ===== 更新公告: 点击版本号显示近三次更新(倒序: 最新在前; 每条用短句概括改动, 一点一换行; 每次发版须 prepend 一条真实版本) =====
   // 文案规则: 每条不超过 30 字, 一条一个圆点, 折行不再出点(见 .cl-pt 悬挂缩进)
   const CHANGELOG = [
+    ['v167', [
+      '彻底删除MQTT中继代码(switchToRelay/中继按钮/mqtt.js), 仅留P2P+TURN',
+      '连接阶段也只重试P2P(8s间隔), 无中继逃生; 跨网连不上=明确提示返回大厅'
+    ]],
     ['v166', [
-      '对局内仅P2P: 断开不再提供切换中继, 直接提示返回大厅',
-      'switchToRelay加对局守卫(已进对局禁止切中继, 双保险)'
+      '对局内仅P2P: 断开不再提供切换中继, 直接提示返回大厅'
     ]],
     ['v165', [
       '通道标签两端一致: 任一侧TURN中继即显示中继(不再误导)',

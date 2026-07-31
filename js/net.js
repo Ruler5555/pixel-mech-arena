@@ -83,7 +83,6 @@ const Net = (() => {
   let sendSeq = 0;         // 发送序号(单计数器; 握手/测速幂等不参与去重)
   let lastRecvSeq = 0;     // 已处理的最大对端序号(防重复/过期)
   let rtt = 0;             // 单一 RTT(当前通道实测)
-  let relayOffered = false;// 是否已向用户呈现「切换中继」(避免重复弹)
   let joining = false;     // 连接阶段标志
   let _joinResolve = null; // client joinRoom 的 resolver
   let _joinReject = null;  // client joinRoom 的 rejector(用户取消时调用)
@@ -92,8 +91,6 @@ const Net = (() => {
   const P2P_RETRY_GAP = 8000;  // v163: 8s 重试间隔(对齐 v109 单连接协商哲学: ICE 收集TURN/STUN候选+穿透检查需2-6s, 1.5s 太短会放弃未完成的协商 → 进不去房间)
   let keepAliveTimer = null;
   let pingTimer = null;
-  let mqttClient = null;
-  let relayTopic = null;
   let playerName = '';
   let _channelDetail = '';    // v164: 真实 ICE 通道 ''未知 / 'direct'直连 / 'relay'TURN中继
   let _channelTimer = null;   // v164: 轮询 selected candidate pair 的定时器
@@ -103,7 +100,7 @@ const Net = (() => {
     progress: [], error: [], start: [],
     reset: [], rematchReady: [],
     aimode: [], aipick: [], aistart: [], aipickstart: [], aicancel: [],
-    relayOffered: [], disconnected: []
+
   };
   function on(ev, fn) { (handlers[ev] || []).push(fn); }
   function emit(ev, arg) { (handlers[ev] || []).forEach(fn => { try { fn(arg); } catch (e) {} }); }
@@ -129,7 +126,7 @@ const Net = (() => {
   function _p2pHost() {
     return new Promise((resolve, reject) => {
       role = 'host'; roomCode = genCode(); handshaked = false; mode = 'p2p';
-      joining = false; relayOffered = false;
+
       progress('正在获取 TURN 穿透服务...');
       buildIceServers().then((ice) => {
       let resolved = false;
@@ -143,9 +140,6 @@ const Net = (() => {
       peer.on('open', () => {
         progress('信令已就绪, 等待对手(P2P 直连优先)...');
         finish(roomCode);
-        // 主机同时监听中继通道(仅订阅, 不主动用): client 点「切换中继」可立即连上,
-        // 中继延迟尖刺只在 client 真正走中继时才出现, 不影响 P2P 手感
-        _startRelayListen(roomCode);
       });
 
       peer.on('connection', (c) => {
@@ -180,12 +174,10 @@ const Net = (() => {
   function _p2pJoin(code) {
     return new Promise((resolve, reject) => {
       role = 'client'; roomCode = code; handshaked = false; mode = 'p2p';
-      joining = true; relayOffered = false; p2pConnectAttempts = 0;
+
       progress('正在获取 TURN 穿透服务...');
       _joinResolve = (c) => { resolve(c); };
       _joinReject = (e) => { reject(e); };
-      // 安全网: 8s 内信令/首连都没成 → 提供中继选项(不静默接管)
-      setTimeout(() => { if (!handshaked && !relayOffered) offerRelay(); }, 8000);
       buildIceServers().then((ice) => {
         try { peer = new Peer({ debug: 1, config: ice }); }
         catch (e) { reject(e); return; }
@@ -193,7 +185,6 @@ const Net = (() => {
         peer.on('open', () => {
           progress('信令已就绪, 正在尝试 P2P 直连...');
           _tryP2pConnect();
-          _startRelayListen(code); // 预订阅中继: 用户点「切换中继」可秒连
         });
 
         peer.on('disconnected', () => { progress('信令断开, 重连中...'); try { peer.reconnect(); } catch (e) {} });
@@ -225,23 +216,6 @@ const Net = (() => {
     }, P2P_RETRY_GAP);
   }
 
-  // 连接阶段: 仅通知上层弹出「切换中继(高延迟)」按钮(逃生选项), 绝不停止 P2P 重试; 用户不点则 P2P 一直试
-  function offerRelay() {
-    if (relayOffered) return;
-    relayOffered = true;
-    emit('relayOffered');
-  }
-
-  // 用户显式切换中继(仅连接阶段逃生用)
-  // v166: 对局内仅 P2P 通道 —— 已握手(进对局)后禁止切换中继, 双保险
-  function switchToRelay() {
-    if (handshaked) { progress('对局内仅支持 P2P 通道, 不切换中继'); return; }
-    relayOffered = true;
-    mode = 'relay';
-    if (mqttClient && mqttClient.connected) { _relaySend({ t: 'hello', n: playerName }); return; }
-    _relayConnect(roomCode, () => { /* role==='client'&&mode==='relay' 会自动发 hello */ },
-      () => progress('中继也连不上'));
-  }
   // 用户取消连接(返回大厅): 解阻塞 joinRoom
   function abortJoin() {
     if (_joinReject) { const r = _joinReject; _joinReject = null; _joinResolve = null; r(new Error('已取消')); }
@@ -265,7 +239,6 @@ const Net = (() => {
   function _handleHello(msg, ch) {
     if (role === 'host') {
       _emitConnected({ name: msg.n || '' }, ch);
-      if (ch === 'relay') _relaySend({ t: 'world', n: playerName }); // 中继下 client 需 world 确认
     } else {
       _emitConnected({ name: msg.n || '' }, ch);
     }
@@ -361,119 +334,13 @@ const Net = (() => {
   }
   function getChannelDetail() { return _channelDetail; }
 
-  // ============ 中继模式(MQTT over WebSocket) ============
-  // 用 EMQX 公共 broker(broker.emqx.io),国内可达,对 WebSocket 友好
-  // 每个房间用 topic: pma26/<code>,双方都订阅同一 topic
-  const MQTT_BROKERS = [
-    'wss://broker.emqx.io:8084/mqtt',
-    'wss://broker.hivemq.com:8884/mqtt'
-  ];
-
-  // 主机/客户端监听中继(订阅 topic, 不主动发游戏消息; 仅 client 显式 switchToRelay 后才发 hello)
-  function _startRelayListen(code) { _relayConnect(code, () => {}, () => {}); }
-  function _relayConnect(code, onBroker, onFail) {
-    if (typeof mqtt === 'undefined') { if (onFail) onFail(new Error('MQTT 库未加载')); return; }
-    if (mqttClient && mqttClient.connected) { if (onBroker) onBroker(code); return; }
-    relayTopic = 'pma26/' + code;
-    const tryBroker = (idx) => {
-      if (idx >= MQTT_BROKERS.length) { if (onFail) onFail(new Error('中继连接失败: 所有 broker 均不可用')); return; }
-      try { if (mqttClient) mqttClient.end(true); } catch (e) {} // 切 broker 前结束上一个
-      mqttClient = null;
-      let resolved = false;
-      let peerReady = false;
-      let helloRetryTimer = null;
-      const tag = idx === 0 ? 'EMQX' : 'HiveMQ';
-
-      try {
-        const clientId = 'pma26-' + role + '-' + Date.now() + '-' + Math.random().toString(16).slice(2, 6);
-        mqttClient = mqtt.connect(MQTT_BROKERS[idx], {
-          clientId, clean: true, keepalive: 30,
-          reconnectPeriod: 2000, connectTimeout: 10000
-        });
-      } catch (e) { tryBroker(idx + 1); return; }
-
-      mqttClient.on('connect', () => {
-        if (!resolved) {
-          resolved = true;
-          progress('中继已连接(' + tag + '), 等待对手...');
-          mqttClient.subscribe(relayTopic, { qos: 0 });
-          _startPingMonitor();
-        } else {
-          progress('中继已重连');
-          try { mqttClient.subscribe(relayTopic, { qos: 0 }); } catch (e) {}
-          if (peerReady) { _relaySend({ t: 'hello', n: playerName }); _emitConnected({ name: '' }, 'relay'); }
-        }
-        // client 且仅在已显式选中继(mode==='relay')时主动发 hello(重试直到收到 world)
-        if (role === 'client' && mode === 'relay') {
-          const sendHello = () => {
-            if (peerReady) return;
-            _relaySend({ t: 'hello', n: playerName });
-            helloRetryTimer = setTimeout(sendHello, 1500);
-          };
-          setTimeout(sendHello, 300);
-        }
-        if (onBroker) onBroker(code);
-      });
-
-      mqttClient.on('message', (topic, payload) => {
-        try {
-          const msg = JSON.parse(payload.toString());
-          if (!msg || !msg.t) return;
-          if (msg.r === role) return; // 忽略自己发的
-          if (msg.t === 'hello') {
-            if (!peerReady) { peerReady = true; if (helloRetryTimer) { clearTimeout(helloRetryTimer); helloRetryTimer = null; } }
-            _handleHello(msg, 'relay');
-          } else if (msg.t === 'world') {
-            if (!peerReady) { peerReady = true; if (helloRetryTimer) { clearTimeout(helloRetryTimer); helloRetryTimer = null; } }
-            _handleWorld(msg, 'relay');
-          } else {
-            if (!_acceptSeq(msg)) return;
-            _routeMsg(msg, 'relay');
-          }
-        } catch (e) {}
-      });
-
-      mqttClient.on('error', (err) => {
-        if (!resolved) {
-          progress('中继 ' + tag + ' 不可用, 尝试备用...');
-          tryBroker(idx + 1);
-        } else {
-          emit('error', new Error('中继连接错误'));
-        }
-      });
-
-      mqttClient.on('offline', () => { if (peerReady) progress('中继重连中...'); });
-      mqttClient.on('reconnect', () => { if (peerReady) progress('中继重连中...'); });
-    };
-    tryBroker(0);
-  }
-
-  function _relaySend(obj) {
-    if (!mqttClient || !mqttClient.connected) return;
-    obj.r = role;
-    if (obj.q === undefined) obj.q = ++sendSeq;
-    try { mqttClient.publish(relayTopic, JSON.stringify(obj), { qos: 0 }); } catch (e) {}
-  }
-
-  // 显式中继建房/加入(备用的手动入口, 常规流程走 hostRoom/joinRoom + switchToRelay)
-  function hostRelay() {
-    mode = 'relay'; role = 'host'; roomCode = genCode();
-    return new Promise((resolve, reject) => { _relayConnect(roomCode, resolve, reject); });
-  }
-  function joinRelay(code) {
-    mode = 'relay'; role = 'client'; roomCode = code;
-    return new Promise((resolve, reject) => { _relayConnect(code, resolve, reject); });
-  }
-
   // ============ 通用接口 ============
-  // 单通道发送, 恢复 v109 的「P2P 优先」:
-  //   P2P 通道(conn)可用就发 P2P(低延迟); P2P 短暂停滞时宁可丢帧等重连,
-  //   绝不悄悄切境外 MQTT 中继(500ms+ 延迟尖刺 —— v109 明确修复过的根因, v145 重构时误丢)。
-  //   仅当用户显式切换中继(mode==='relay')才走 MQTT。
+  // 单通道发送(v167: 已删 MQTT 中继, 仅 P2P 通道):
+  //   P2P 通道(conn)可用就发 P2P(低延迟); P2P 断开时宁可丢帧等重连,
+  //   绝不走任何中继(500ms+ 延迟尖刺的根源已彻底移除)
   function send(obj) {
     obj.q = ++sendSeq;
     if (conn && conn.open) { try { conn.send(obj); } catch (e) {} return; }
-    if (mode === 'relay' && mqttClient && mqttClient.connected) { _relaySend(obj); return; }
   }
   function sendState(s) { send({ t: 'state', s }); }
   function sendInput(c) { send({ t: 'input', c }); }
@@ -489,7 +356,7 @@ const Net = (() => {
   function sendAiCancel() { send({ t: 'aicxl' }); }
 
   function getRole() { return role; }
-  function isConnected() { return !!(conn && conn.open) || !!(mqttClient && mqttClient.connected); }
+  function isConnected() { return !!(conn && conn.open); }
   function getRoomCode() { return roomCode; }
   function getMode() { return mode; }
   function getStateChannel() { return mode; } // 当前实际承载通道(单值, 不再有"谁先到谁赢"竞态)
@@ -503,10 +370,8 @@ const Net = (() => {
   }
   function close() {
     _cleanupP2P();
-    try { if (mqttClient) mqttClient.end(true); } catch (e) {}
-    mqttClient = null; relayTopic = null;
     role = null; roomCode = null; mode = 'p2p';
-    handshaked = false; relayOffered = false; joining = false;
+    handshaked = false; joining = false;
     _joinResolve = null; _joinReject = null;
     sendSeq = 0; lastRecvSeq = 0; rtt = 0;
     clearTimeout(p2pRetryTimer); p2pRetryTimer = null;
@@ -515,7 +380,7 @@ const Net = (() => {
   }
 
   return {
-    on, hostRoom, joinRoom, hostRelay, joinRelay, switchToRelay, abortJoin,
+    on, hostRoom, joinRoom, abortJoin,
     sendState, sendInput, sendReset, sendBye, sendStart, sendRematchReady,
     sendAiMode, sendAiPick, sendAiStart, sendAiPickStart, sendAiCancel,
     setName, getRole, isConnected, getRoomCode, getMode, getRtt, getStateChannel, getChannelDetail, close

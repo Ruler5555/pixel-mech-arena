@@ -966,21 +966,6 @@ body.ai-pick .exit-mobile-btn { display: inline-flex; font-size: 9px; padding: 3
 }
 .cancel-btn:hover { color: var(--red-lt); border-color: var(--red-dk); }
 .cancel-btn:active { transform: translateY(2px); color: var(--red-lt); border-color: var(--red-dk); }
-.relay-btn {
-  font-size: 9px;
-  letter-spacing: 1px;
-  color: var(--border);
-  background: linear-gradient(180deg, #ffb347 0%, #e8852b 100%);
-  border: 3px solid var(--border);
-  border-radius: 12px;
-  box-shadow: 0 4px 0 var(--border);
-  padding: 9px 16px;
-  cursor: pointer;
-  margin-top: 10px;
-}
-.relay-btn:hover { filter: brightness(1.08); }
-.relay-btn:active { transform: translateY(2px); filter: brightness(1.12); }
-
 /* ===== Controls ===== */
 .controls { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 12px; }
 .ctrl { font-size: 7px; background: var(--panel); border: 2px solid var(--panel2); border-radius: 8px; padding: 6px 8px; color: var(--dim); }
