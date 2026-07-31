@@ -549,13 +549,15 @@ button:active:not(:disabled) { transform: translateY(2px); }
 .world-item-name { font-size: 7px; color: var(--dim); }
 .world-item-time { font-size: 6px; color: var(--dim); opacity: 0.6; margin-top: 3px; }
 
-/* ===== 玩法选择屏(Hub → 副本 → 选择模式) ===== */
-#modeSelect {
+/* ===== 玩法选择屏(Hub → 副本 → 选择模式 / 联机 → 选择联机玩法) ===== */
+#modeSelect, #onlineModeSelect {
   display: flex;
   flex-direction: column;
   padding: 50px 16px 24px;
   animation: fadeIn 0.4s ease-out;
 }
+/* 联机玩法屏额外下移, 让「← 返回」键避开固定常驻顶栏(persistEdge) */
+#onlineModeSelect { padding-top: 66px; }
 .ms-top {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
