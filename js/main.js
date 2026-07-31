@@ -150,16 +150,20 @@
   }
 
   // [v136] 模式/延迟标签: 对局顶栏(#topCluster)与 AI 选风格屏顶栏(aiPickRtt/aiPickModeTag)共用同一套显示逻辑
+  // [v164] 真实通道: getChannelDetail() 识别 ICE 实际候选类型(直连/TURN中继), 避免"P2P标签骗人"
   function updateNetTags() {
     const setMode = (el) => {
       if (!el) return;
+      let m;
+      if (Net.getStateChannel() === 'relay') m = '中继';
+      else if (Net.getChannelDetail() === 'relay') m = 'TURN中继';
+      else if (Net.getChannelDetail() === 'direct') m = 'P2P直连';
+      else m = 'P2P';
       if (game.mode === 'offline') {
         el.textContent = '离线 vs AI';
       } else if (game.mode === 'host' || game.mode === 'aiHost') {
-        const m = Net.getStateChannel() === 'relay' ? '中继' : 'P2P';
         el.textContent = (game.mode === 'aiHost' ? 'AI房主 · ' : '主机 · ') + (Net.isConnected() ? m : m + ' 等待中');
       } else if (game.mode === 'client' || game.mode === 'aiClient') {
-        const m = Net.getStateChannel() === 'relay' ? '中继' : 'P2P';
         el.textContent = (game.mode === 'aiClient' ? 'AI观战 · ' : '客户端 · ') + (Net.isConnected() ? m : m + ' 重连中');
       }
     };
@@ -1068,6 +1072,10 @@
   // ===== 更新公告: 点击版本号显示近三次更新(倒序: 最新在前; 每条用短句概括改动, 一点一换行; 每次发版须 prepend 一条真实版本) =====
   // 文案规则: 每条不超过 30 字, 一条一个圆点, 折行不再出点(见 .cl-pt 悬挂缩进)
   const CHANGELOG = [
+    ['v164', [
+      '右上角标签显示真实通道: P2P直连/TURN中继/中继 一目了然',
+      '识别对称NAT被迫走TURN中继的真相, 不再被P2P标签误导'
+    ]],
     ['v163', [
       '修复v162回归: P2P重试间隔1.5s→8s(给ICE协商充足时间)',
       '单连接协商+充足等待=穿透完成不再被中途放弃'

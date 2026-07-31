@@ -95,6 +95,8 @@ const Net = (() => {
   let mqttClient = null;
   let relayTopic = null;
   let playerName = '';
+  let _channelDetail = '';    // v164: 真实 ICE 通道 ''未知 / 'direct'直连 / 'relay'TURN中继
+  let _channelTimer = null;   // v164: 轮询 selected candidate pair 的定时器
 
   const handlers = {
     open: [], connected: [], state: [], input: [], close: [],
@@ -299,6 +301,7 @@ const Net = (() => {
   }
 
   function bindConn(c) {
+    _watchSelectedPair(c);  // v164: 检测真实 ICE 通道(直连/TURN中继)
     c.on('open', () => {
       progress('P2P 已建立');
       _startPingMonitor();
@@ -321,6 +324,37 @@ const Net = (() => {
     });
     c.on('error', () => { if (handshaked) emit('disconnected'); });
   }
+
+  // ============ v164: 真实 ICE 通道检测 ============
+  // 右上角"P2P"标签只代表走 WebRTC DataChannel, 不代表物理直连!
+  // 对称 NAT 时 ICE 只能选 relay 候选对 → 数据实际经 TURN 服务器中继(几百ms)但标签仍显示 P2P。
+  // 通过 pc.getStats() 轮询 selected candidate pair, 识别 local candidate 类型:
+  //   host/srflx = 真直连(几十ms)  relay = TURN 中继(几百ms)
+  function _watchSelectedPair(c) {
+    try {
+      const pc = c._pc || c.peerConnection;
+      if (!pc || typeof pc.getStats !== 'function') return;
+      clearInterval(_channelTimer);
+      const poll = async () => {
+        try {
+          const stats = await pc.getStats();
+          let sel = null;
+          stats.forEach((r) => {
+            if (r.type === 'candidate-pair' && r.state === 'succeeded' && !sel) sel = r;
+          });
+          if (sel && sel.localCandidateId) {
+            const local = stats.get(sel.localCandidateId);
+            if (local && local.candidateType) {
+              _channelDetail = (local.candidateType === 'relay') ? 'relay' : 'direct';
+            }
+          }
+        } catch (e) {}
+      };
+      poll();
+      _channelTimer = setInterval(poll, 2000);
+    } catch (e) {}
+  }
+  function getChannelDetail() { return _channelDetail; }
 
   // ============ 中继模式(MQTT over WebSocket) ============
   // 用 EMQX 公共 broker(broker.emqx.io),国内可达,对 WebSocket 友好
@@ -472,12 +506,13 @@ const Net = (() => {
     sendSeq = 0; lastRecvSeq = 0; rtt = 0;
     clearTimeout(p2pRetryTimer); p2pRetryTimer = null;
     _stopPingMonitor();
+    clearInterval(_channelTimer); _channelTimer = null; _channelDetail = '';
   }
 
   return {
     on, hostRoom, joinRoom, hostRelay, joinRelay, switchToRelay, abortJoin,
     sendState, sendInput, sendReset, sendBye, sendStart, sendRematchReady,
     sendAiMode, sendAiPick, sendAiStart, sendAiPickStart, sendAiCancel,
-    setName, getRole, isConnected, getRoomCode, getMode, getRtt, getStateChannel, close
+    setName, getRole, isConnected, getRoomCode, getMode, getRtt, getStateChannel, getChannelDetail, close
   };
 })();
