@@ -1011,8 +1011,6 @@
       if (game.mode === 'host') game.applyRemoteInput(c);
     });
     Net.on('progress', (msg) => {
-      // v157: 连接阶段(角色未建立)把进度/诊断直接显示到大厅状态栏, 不只在隐藏弹层里
-      if (!Net.getRole()) setStatus(msg);
       const cur = ovText.textContent || '';
       const lines = cur.split('\n').filter(l => !l.startsWith('['));
       ovText.textContent = lines.join('\n') + '\n[' + msg + ']';
@@ -1070,6 +1068,10 @@
   // ===== 更新公告: 点击版本号显示近三次更新(倒序: 最新在前; 每条用短句概括改动, 一点一换行; 每次发版须 prepend 一条真实版本) =====
   // 文案规则: 每条不超过 30 字, 一条一个圆点, 折行不再出点(见 .cl-pt 悬挂缩进)
   const CHANGELOG = [
+    ['v159', [
+      '移除连接诊断显示(界面恢复简洁, 连接功能保留)',
+      '跨网联机已可用(TURN就近路由+新加坡兜底)'
+    ]],
     ['v158', [
       'TURN改global就近路由(对齐v110体验, 香港/新加坡/日本自动最优)',
       'STUN恢复Twilio冗余, 提升公网直连候选收集概率'
