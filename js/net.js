@@ -328,8 +328,9 @@ const Net = (() => {
   // ============ v164: 真实 ICE 通道检测 ============
   // 右上角"P2P"标签只代表走 WebRTC DataChannel, 不代表物理直连!
   // 对称 NAT 时 ICE 只能选 relay 候选对 → 数据实际经 TURN 服务器中继(几百ms)但标签仍显示 P2P。
-  // 通过 pc.getStats() 轮询 selected candidate pair, 识别 local candidate 类型:
-  //   host/srflx = 真直连(几十ms)  relay = TURN 中继(几百ms)
+  // 通过 pc.getStats() 轮询 selected candidate pair, 识别候选对类型:
+  //   v165: 同时检查 local+remote —— 任一侧是 relay 即整体走 TURN 中继(两端显示一致),
+  //   只有两侧都是 host/srflx 才是真 P2P 直连(几十ms)
   function _watchSelectedPair(c) {
     try {
       const pc = c._pc || c.peerConnection;
@@ -344,9 +345,11 @@ const Net = (() => {
           });
           if (sel && sel.localCandidateId) {
             const local = stats.get(sel.localCandidateId);
-            if (local && local.candidateType) {
-              _channelDetail = (local.candidateType === 'relay') ? 'relay' : 'direct';
-            }
+            const remote = stats.get(sel.remoteCandidateId);
+            const lt = local ? (local.candidateType || '') : '';
+            const rt = remote ? (remote.candidateType || '') : '';
+            // 任一侧 relay = 数据经 TURN 中继; 两侧均非 relay = 真直连
+            _channelDetail = (lt === 'relay' || rt === 'relay') ? 'relay' : 'direct';
           }
         } catch (e) {}
       };
