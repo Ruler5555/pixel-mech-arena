@@ -6,7 +6,7 @@
 //   - 对局中断线不再静默翻 mode, 而是弹「连接断开」让用户手动决策
 // 相对 v143 的改进(根治"常驻260/两头中继/主机不刷新"三连 bug):
 //   1. 删除"活性监测每帧仲裁 + state 双发同序号"三态机(前版 bug 温床)
-//   2. 连接阶段 P2P 自动重试(最多 4 次/约 6s), 失败自动弹出「切换中继(高延迟)」按钮
+//   2. 连接阶段 P2P 无限重试(永不放弃), 8s 后弹出「切换中继(高延迟)」按钮作逃生选项(不自动落中继, P2P 持续重试)
 //   3. 中继降级为显式兜底: 连上明确告知高延迟、几乎不可玩; 不再静默翻 mode
 //   4. 单一 RTT / 单一通道路由, 逻辑复杂度减半
 // 说明: 中继经公共 MQTT broker(EMQX/HiveMQ), 实测 RTT≈500ms, 对实时格斗几乎不可玩,
@@ -59,8 +59,7 @@ const Net = (() => {
   let _joinReject = null;  // client joinRoom 的 rejector(用户取消时调用)
   let p2pRetryTimer = null;
   let p2pConnectAttempts = 0;
-  const P2P_RETRY_MAX = 4;     // P2P 最多尝试次数
-  const P2P_RETRY_GAP = 1500;  // 每次间隔 1.5s(共约 6s + 首次)
+  const P2P_RETRY_GAP = 1500;  // 每次间隔 1.5s, 无限重试
   let keepAliveTimer = null;
   let pingTimer = null;
   let mqttClient = null;
@@ -167,26 +166,24 @@ const Net = (() => {
       });
     });
   }
-  // P2P 自动重试: 每次间隔 P2P_RETRY_GAP, 至多 P2P_RETRY_MAX 次, 耗尽则交还用户决策(弹「切换中继」)
+  // P2P 无限重试: 每次间隔 P2P_RETRY_GAP, 永不放弃(用户可手动点「切换中继」或「返回大厅」)
   function _tryP2pConnect() {
     if (handshaked) return;
     if (!peer || peer.destroyed) return;
     p2pConnectAttempts++;
-    progress('P2P 直连尝试 ' + p2pConnectAttempts + '/' + P2P_RETRY_MAX + '...');
+    progress('P2P 直连尝试 ' + p2pConnectAttempts + ' 次...');
     const c = peer.connect(PEER_PREFIX + roomCode, { reliable: true, serialization: 'json' });
     conn = c; bindConn(c);
     p2pRetryTimer = setTimeout(() => {
       if (handshaked) return;
-      if (p2pConnectAttempts >= P2P_RETRY_MAX) offerRelay();
-      else _tryP2pConnect();
+      _tryP2pConnect();   // 永不放弃, 持续重试 P2P
     }, P2P_RETRY_GAP);
   }
 
-  // 连接阶段 P2P 失败 → 通知上层弹出「切换中继(高延迟)」按钮(一次性决策, 不自动落中继)
+  // 连接阶段: 仅通知上层弹出「切换中继(高延迟)」按钮(逃生选项), 绝不停止 P2P 重试; 用户不点则 P2P 一直试
   function offerRelay() {
     if (relayOffered) return;
     relayOffered = true;
-    clearTimeout(p2pRetryTimer); p2pRetryTimer = null;
     emit('relayOffered');
   }
 
