@@ -25,11 +25,11 @@ const TURN_SERVERS = [
   // ⚠️ 端口优先级(国内防火墙现实): 443(TLS) > 80 > 3478
   //   - 3478(udp/tcp) 跨境常被干扰导致 TURN 分配失败 → 对称 NAT 连不上("加不进房间")
   //   - 443 是 HTTPS 端口几乎必通, turns:(TLS) 跨境穿透最稳 → 提最高优先级
-  { urls: 'turns:global.turn.server.at:443?transport=tcp', username: '425449aea566e68b32d835d0', credential: 'GUKibG6xmWU+XF+t' },
-  { urls: 'turn:global.turn.server.at:443?transport=tcp', username: '425449aea566e68b32d835d0', credential: 'GUKibG6xmWU+XF+t' },
-  { urls: 'turn:global.turn.server.at:80?transport=tcp', username: '425449aea566e68b32d835d0', credential: 'GUKibG6xmWU+XF+t' },
-  { urls: 'turn:global.turn.server.at:3478?transport=tcp', username: '425449aea566e68b32d835d0', credential: 'GUKibG6xmWU+XF+t' },
-  { urls: 'turn:global.turn.server.at:3478', username: '425449aea566e68b32d835d0', credential: 'GUKibG6xmWU+XF+t' }
+  // 地址格式: turn:<APP_ID>.turn.metered.ca (从用户仪表盘 "TURN Server" 页面确认)
+  { urls: 'turns:6a6cb219d9a1d2c7657619d5.turn.metered.ca:443?transport=tcp', username: '425449aea566e68b32d835d0', credential: 'GUKibG6xmWU+XF+t' },
+  { urls: 'turn:6a6cb219d9a1d2c7657619d5.turn.metered.ca:443?transport=tcp', username: '425449aea566e68b32d835d0', credential: 'GUKibG6xmWU+XF+t' },
+  { urls: 'turn:6a6cb219d9a1d2c7657619d5.turn.metered.ca:3478?transport=tcp', username: '425449aea566e68b32d835d0', credential: 'GUKibG6xmWU+XF+t' },
+  { urls: 'turn:6a6cb219d9a1d2c7657619d5.turn.metered.ca:3478', username: '425449aea566e68b32d835d0', credential: 'GUKibG6xmWU+XF+t' }
 ];
 const ICE_SERVERS = {
   iceServers: [
