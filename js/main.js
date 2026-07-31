@@ -512,6 +512,7 @@
 
   function backToLobby() {
     resetRematchState();
+    document.body.classList.remove('ai-spectate'); // 退出 AI 观战: 恢复触控操作键
     roomMode = 'pvp'; // 复位玩法与 AI 选择, 防止状态泄漏到下一个房间
     hostPickId = null; clientPickId = null; aiLocalPickId = null; aiConfirmed = false;
     myRole = null;
@@ -787,6 +788,7 @@
   }
   function startAIMatch() {
     game.setMode('aiHost');
+    document.body.classList.add('ai-spectate'); // AI 观战: 隐藏触控操作键
     game.setAIPresets(hostPickId, clientPickId);
     roleP1.textContent = '你的AI';
     roleP2.textContent = '对手AI';
@@ -951,6 +953,7 @@
       // client 收到: 双方风格下发, 开始观战对打
       if (myRole !== 'client' || roomMode !== 'ai') return;
       game.setMode('aiClient');
+      document.body.classList.add('ai-spectate'); // AI 观战: 隐藏触控操作键
       game.setAIPresets(cfg.p1, cfg.p2);
       roleP1.textContent = '对手AI';
       roleP2.textContent = '你的AI';
@@ -1010,6 +1013,11 @@
   // ===== 更新公告: 点击版本号显示近三次更新(倒序: 最新在前; 每条用短句概括改动, 一点一换行; 每次发版须 prepend 一条真实版本) =====
   // 文案规则: 每条不超过 30 字, 一条一个圆点, 折行不再出点(见 .cl-pt 悬挂缩进)
   const CHANGELOG = [
+    ['v128', [
+      '盾牌减伤90%反伤60%加0.5秒再防冷却',
+      'AI观战模式隐藏全部触控操作键',
+      'AI全风格支持二段跳并强化个性'
+    ]],
     ['v125', [
       '攻击波纹圈改以拳口为中心并下移'
     ]],

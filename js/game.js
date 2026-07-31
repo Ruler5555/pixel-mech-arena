@@ -30,24 +30,30 @@ class Particle {
 // 机甲 AI 战斗风格预设(联机「AI 对战观战」模式用)
 // 每个 preset 是一组决策参数, 决定 AI 的"性格"; 玩家在赛前为自家机甲 AI 选一个
 const AI_PRESETS = {
-  balanced:   { id:'balanced',   name:'均衡', emoji:'⚖️', desc:'攻防节奏均衡, 适合新手',
-    reactMin:0.25, reactMax:0.55, defendProb:0.60, approachDist:130, closeDist:60,
-    closeL:0.50, closeH:0.20, closeBack:0.30, midApproach:0.60, midL:0.25, midDef:0.15, jumpProb:0.00 },
-  berserker:  { id:'berserker',  name:'猛攻', emoji:'🔥', desc:'高频贴脸重击, 防御薄弱',
-    reactMin:0.15, reactMax:0.35, defendProb:0.25, approachDist:150, closeDist:50,
-    closeL:0.35, closeH:0.45, closeBack:0.20, midApproach:0.70, midL:0.25, midDef:0.05, jumpProb:0.05 },
-  bulwark:    { id:'bulwark',    name:'铁壁', emoji:'🛡️', desc:'高防御反击, 龟缩消耗',
-    reactMin:0.20, reactMax:0.40, defendProb:0.85, approachDist:120, closeDist:70,
-    closeL:0.30, closeH:0.10, closeBack:0.30, midApproach:0.40, midL:0.20, midDef:0.40, jumpProb:0.00 },
-  skirmisher: { id:'skirmisher', name:'游击', emoji:'🏹', desc:'打了就跑, 走位风筝',
-    reactMin:0.20, reactMax:0.45, defendProb:0.40, approachDist:140, closeDist:55,
-    closeL:0.40, closeH:0.20, closeBack:0.40, midApproach:0.50, midL:0.35, midDef:0.15, jumpProb:0.10 },
-  gale:       { id:'gale',       name:'疾风', emoji:'🌪️', desc:'高频跳跃穿插, 灵动机动',
-    reactMin:0.15, reactMax:0.35, defendProb:0.30, approachDist:150, closeDist:60,
-    closeL:0.60, closeH:0.20, closeBack:0.20, midApproach:0.70, midL:0.25, midDef:0.05, jumpProb:0.35 },
+  balanced:   { id:'balanced',   name:'均衡', emoji:'⚖️', desc:'攻防节奏均衡, 全面稳定',
+    reactMin:0.28, reactMax:0.55, defendProb:0.55, approachDist:130, closeDist:60,
+    closeL:0.48, closeH:0.18, closeBack:0.34, midApproach:0.55, midL:0.25, midDef:0.20,
+    jumpProb:0.12, airJumpProb:0.25, evadeProb:0.10 },
+  berserker:  { id:'berserker',  name:'猛攻', emoji:'🔥', desc:'贴脸重击, 压制猛打',
+    reactMin:0.14, reactMax:0.32, defendProb:0.20, approachDist:160, closeDist:48,
+    closeL:0.30, closeH:0.50, closeBack:0.20, midApproach:0.75, midL:0.25, midDef:0.05,
+    jumpProb:0.18, airJumpProb:0.30, evadeProb:0.02 },
+  bulwark:    { id:'bulwark',    name:'铁壁', emoji:'🛡️', desc:'高防反击, 龟缩消耗',
+    reactMin:0.22, reactMax:0.42, defendProb:0.90, approachDist:115, closeDist:72,
+    closeL:0.25, closeH:0.08, closeBack:0.25, midApproach:0.35, midL:0.15, midDef:0.50,
+    jumpProb:0.02, airJumpProb:0.05, evadeProb:0.03 },
+  skirmisher: { id:'skirmisher', name:'游击', emoji:'🏹', desc:'打了就跑, 风筝走位',
+    reactMin:0.18, reactMax:0.42, defendProb:0.35, approachDist:145, closeDist:58,
+    closeL:0.45, closeH:0.15, closeBack:0.40, midApproach:0.45, midL:0.40, midDef:0.15,
+    jumpProb:0.22, airJumpProb:0.45, evadeProb:0.30 },
+  gale:       { id:'gale',       name:'疾风', emoji:'🌪️', desc:'高频跳跃, 灵动机动',
+    reactMin:0.14, reactMax:0.34, defendProb:0.25, approachDist:155, closeDist:60,
+    closeL:0.55, closeH:0.20, closeBack:0.25, midApproach:0.70, midL:0.30, midDef:0.05,
+    jumpProb:0.45, airJumpProb:0.60, evadeProb:0.25 },
   precision:  { id:'precision',  name:'精准', emoji:'🎯', desc:'反应极快, 抓帧惩罚',
-    reactMin:0.10, reactMax:0.25, defendProb:0.75, approachDist:130, closeDist:65,
-    closeL:0.55, closeH:0.25, closeBack:0.20, midApproach:0.55, midL:0.25, midDef:0.20, jumpProb:0.05 }
+    reactMin:0.08, reactMax:0.22, defendProb:0.78, approachDist:130, closeDist:65,
+    closeL:0.55, closeH:0.25, closeBack:0.20, midApproach:0.50, midL:0.30, midDef:0.20,
+    jumpProb:0.12, airJumpProb:0.30, evadeProb:0.15 }
 };
 const AI_PRESET_LIST = ['balanced','berserker','bulwark','skirmisher','gale','precision'];
 
@@ -69,9 +75,14 @@ function makeAI(cfg) {
       if (this.reactTimer <= 0) {
         this.reactTimer = cfg.reactMin + Math.random() * (cfg.reactMax - cfg.reactMin);
         const foeActive = foe.attackActive();
-        if (foeActive && dist < 90 && Math.random() < cfg.defendProb) this.decision = 'defend';
-        else if (dist > cfg.approachDist) this.decision = 'approach';
-        else if (dist < cfg.closeDist) {
+        if (foeActive && dist < 95) {
+          // 对手正在攻击且贴近: 优先防御, 其次风格化跳跃闪避
+          if (Math.random() < cfg.defendProb) this.decision = 'defend';
+          else if (cfg.evadeProb > 0 && Math.random() < cfg.evadeProb) this.decision = 'evade';
+          else this.decision = 'approach';
+        } else if (dist > cfg.approachDist) {
+          this.decision = 'approach';
+        } else if (dist < cfg.closeDist) {
           const r = Math.random();
           const s = cfg.closeL + cfg.closeH + cfg.closeBack;
           if (r < cfg.closeL / s) this.decision = 'atkL';
@@ -84,16 +95,38 @@ function makeAI(cfg) {
           else if (r < (cfg.midApproach + cfg.midL) / s) this.decision = 'atkL';
           else this.decision = 'defend';
         }
-        // 偶尔跳跃(默认 0, 仅部分风格会跳)
+        // 地面起跳(风格化): 拉近距离 / 制造立体进攻
         if (cfg.jumpProb > 0 && self.onGround && Math.random() < cfg.jumpProb) this.decision = 'jump';
       }
+
+      // 空中二段跳: 所有会跳的风格在一段跳后按 airJumpProb 补跳, 立体机动更明显
+      if (!self.onGround && self.jumpCount === 1 && cfg.airJumpProb > 0 && !this._last.jump
+          && Math.random() < cfg.airJumpProb * 0.12) {
+        this.decision = 'airJump';
+      }
+
       switch (this.decision) {
         case 'approach': if (dir > 0) ctrl.right = true; else ctrl.left = true; break;
-        case 'back': if (dir > 0) ctrl.left = true; else ctrl.right = true; break;
-        case 'atkL': if (!this._last.atkL && self.onGround && self.cooldown <= 0) ctrl.tapL = true; break;
-        case 'atkH': if (!this._last.atkH && self.onGround && self.cooldown <= 0) ctrl.tapH = true; break;
-        case 'defend': ctrl.defend = true; break;
-        case 'jump': if (!this._last.jump && self.onGround && self.jumpCount < 2) ctrl.tapJump = true; break;
+        case 'back':     if (dir > 0) ctrl.left = true; else ctrl.right = true; break;
+        case 'atkL':
+          if (!this._last.atkL && self.onGround && self.cooldown <= 0) { ctrl.tapL = true; this.decision = 'idle'; }
+          break;
+        case 'atkH':
+          if (!this._last.atkH && self.onGround && self.cooldown <= 0) { ctrl.tapH = true; this.decision = 'idle'; }
+          break;
+        case 'defend': ctrl.defend = true; break; // 持续按住, 直到下次重掷
+        case 'jump':
+          if (!this._last.jump && self.onGround && self.jumpCount < 2) { ctrl.tapJump = true; this.decision = 'idle'; }
+          break;
+        case 'airJump':
+          if (!self.onGround && self.jumpCount < 2) { ctrl.tapJump = true; this.decision = 'idle'; }
+          break;
+        case 'evade':
+          // 后跳逃离: 地面先起跳, 空中补二段跳
+          if (dir > 0) ctrl.left = true; else ctrl.right = true;
+          if (self.onGround && !this._last.jump) { ctrl.tapJump = true; this.decision = 'idle'; }
+          else if (!self.onGround && self.jumpCount < 2) { ctrl.tapJump = true; this.decision = 'idle'; }
+          break;
       }
       this._last.atkL = ctrl.tapL;
       this._last.atkH = ctrl.tapH;
@@ -641,9 +674,9 @@ class Game {
       attacker._hitDone = true;
       this.shake = result < 0 ? 0.12 : (attacker.atk && attacker.atk.type === 'H' ? 0.35 : 0.18);
       this._spawnHitFX(hb.x + hb.w / 2, hb.y + hb.h / 2, result < 0, attacker.atk && attacker.atk.type === 'H');
-      // 防御反伤: 盾牌减伤50% + 反伤50% 给攻击者
+      // 防御反伤: 减伤90% + 反伤60% 给攻击者
       if (result < 0) {
-        const reflected = Math.round(hb.dmg * 0.5); // 反伤 50%(保持), 攻击方承担
+        const reflected = Math.round(hb.dmg * 0.6); // 反伤 60%, 攻击方承担
         attacker.hp = Math.max(0, attacker.hp - reflected);
         attacker.flash = 0.15;
         attacker.vx += (attacker.x >= defender.x ? 1 : -1) * 0.5;

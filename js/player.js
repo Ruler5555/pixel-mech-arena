@@ -42,6 +42,7 @@ class Mech {
 
     // 防御
     this.defending = false;
+    this.defendCD = 0;   // 再防冷却: 松手后 0.5s 内不能再次举盾
 
     // 攻击冷却(避免连点)
     this.cooldown = 0;
@@ -83,7 +84,7 @@ class Mech {
     if (this.state === 'ko') return 0;
     // 防御减伤
     if (this.defending && this.state === 'defend') {
-      const taken = dmg * 0.2; // 盾牌减伤 80%, 仅承受 20%(内部保留小数, 显示时四舍五入)
+      const taken = dmg * 0.1; // 盾牌减伤 90%, 仅承受 10%(内部保留小数, 显示时四舍五入)
       this.hp = Math.max(0, this.hp - taken);
       this.flash = 0.12;
       // 防御时仍受小幅击退但不进入 hurt
@@ -134,6 +135,7 @@ class Mech {
     this.frame++;
     this.stateTime += dt;
     if (this.cooldown > 0) this.cooldown -= dt;
+    if (this.defendCD > 0) this.defendCD -= dt;
     if (this.flash > 0) this.flash -= dt;
     if (this.jumpCD > 0) this.jumpCD -= dt;
 
@@ -142,7 +144,8 @@ class Mech {
     let attacking = this.state === 'atkL' || this.state === 'atkH';
 
     // ---- 输入 ----
-    this.defending = false;
+    const wasDefending = this.defending;
+    let wantDefend = false;
     if (!dead && !hurt) {
       // 攻击触发
       // 关键: startAttack 成功后必须刷新 attacking, 否则本帧后续的
@@ -152,14 +155,11 @@ class Mech {
       if (ctrl.tapL && this.onGround && !attacking) { if (this.startAttack('L')) attacking = true; }
       else if (ctrl.tapH && this.onGround && !attacking) { if (this.startAttack('H')) attacking = true; }
 
-      // 防御(按住) — 攻击中不能切防御
-      if (ctrl.defend && !attacking && this.onGround) {
-        this.defending = true;
-        this.setState('defend');
-      }
+      // 防御(按住) — 攻击中不能切防御; 松手后进入 0.5s 再防冷却
+      wantDefend = ctrl.defend && !attacking && this.onGround && this.defendCD <= 0;
 
       // 移动(防御/攻击中不能移动)
-      const moveLocked = this.defending || attacking;
+      const moveLocked = wantDefend || attacking;
       let dir = 0;
       if (!moveLocked) {
         if (ctrl.left)  dir -= 1;
@@ -197,6 +197,11 @@ class Mech {
         } else this.setState('idle');
       }
     }
+
+    // 防御结果落地: 松开(本次未保持)→ 记 0.5s 再防冷却, 防无限举盾
+    if (wasDefending && !wantDefend && this.defendCD <= 0) this.defendCD = 0.5;
+    this.defending = wantDefend;
+    if (this.defending) this.setState('defend');
 
     // 朝向: 始终面向对手(非攻击/移动时)
     if (!attacking && !hurt && !dead && this.onGround && !this.defending) {

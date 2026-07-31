@@ -966,6 +966,8 @@ body.in-game .exit-mobile-btn { font-size: 9px; padding: 3px 9px; }
   -webkit-user-select: none;
   touch-action: none;
 }
+/* AI 观战模式: 隐藏所有触控操作键(玩家不操控, 仅为观战) */
+.ai-spectate .touch-controls { display: none !important; }
 .move-zone {
   position: relative;
   width: clamp(104px, 28vw, 132px);
