@@ -418,14 +418,14 @@ const Net = (() => {
   }
 
   // ============ 通用接口 ============
-  // 单通道发送: 永远只走当前 mode 承载的通道, 不存在双发/竞态
+  // 单通道发送, 恢复 v109 的「P2P 优先」:
+  //   P2P 通道(conn)可用就发 P2P(低延迟); P2P 短暂停滞时宁可丢帧等重连,
+  //   绝不悄悄切境外 MQTT 中继(500ms+ 延迟尖刺 —— v109 明确修复过的根因, v145 重构时误丢)。
+  //   仅当用户显式切换中继(mode==='relay')才走 MQTT。
   function send(obj) {
     obj.q = ++sendSeq;
-    if (mode === 'p2p' && conn && conn.open) { try { conn.send(obj); } catch (e) {} return; }
-    if (mode === 'relay' && mqttClient && mqttClient.connected) { _relaySend(obj); return; }
-    // 锁定前兜底(理论上锁定后不会到这): 选可用通道尽力发
     if (conn && conn.open) { try { conn.send(obj); } catch (e) {} return; }
-    if (mqttClient && mqttClient.connected) { _relaySend(obj); return; }
+    if (mode === 'relay' && mqttClient && mqttClient.connected) { _relaySend(obj); return; }
   }
   function sendState(s) { send({ t: 'state', s }); }
   function sendInput(c) { send({ t: 'input', c }); }
