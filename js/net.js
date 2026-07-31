@@ -20,10 +20,10 @@
 //   ② 注册 Metered.ca / Twilio 等 TURN 服务(有免费额度), 拿到你自己的 turn: 地址 + 账号密码填下面
 // 没有可用 TURN 时, 跨网只能走 MQTT 中继(≈500ms, 见 switchToRelay)——这是目前唯一跨网通道。
 const TURN_SERVERS = [
-  // ↓↓↓ 把你的 TURN 填在这里(删除下方占位, 换成真实可用的) ↓↓↓
-  // { urls: 'turn:turn.your-domain.com:3478?transport=tcp', username: 'pma', credential: 'YOUR_SECRET' },
-  // { urls: 'turn:turn.your-domain.com:3478?transport=udp', username: 'pma', credential: 'YOUR_SECRET' }
-  // ↑↑↑ 留空则跨网无法直连, 只能靠「切换中继」按钮走 MQTT(高延迟) ↑↑↑
+  // Metered.ca 用户专属 TURN(跨网 NAT 穿透, 真·P2P, 延迟远低于 MQTT 中继)
+  // 凭据由用户账户提供, 可随时在 Metered 后台 Revoke 重置(仓库公开, 此为其固有可见性)
+  { urls: 'turn:global.turn.server.at:3478?transport=tcp', username: '425449aea566e68b32d835d0', credential: 'GUKibG6xmWU+XF+t' },
+  { urls: 'turn:global.turn.server.at:3478?transport=udp', username: '425449aea566e68b32d835d0', credential: 'GUKibG6xmWU+XF+t' }
 ];
 const ICE_SERVERS = {
   iceServers: [
