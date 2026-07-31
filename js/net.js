@@ -232,8 +232,10 @@ const Net = (() => {
     emit('relayOffered');
   }
 
-  // 用户显式切换中继(初始失败 / 对局中断线均可调用)
+  // 用户显式切换中继(仅连接阶段逃生用)
+  // v166: 对局内仅 P2P 通道 —— 已握手(进对局)后禁止切换中继, 双保险
   function switchToRelay() {
+    if (handshaked) { progress('对局内仅支持 P2P 通道, 不切换中继'); return; }
     relayOffered = true;
     mode = 'relay';
     if (mqttClient && mqttClient.connected) { _relaySend({ t: 'hello', n: playerName }); return; }

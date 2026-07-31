@@ -1027,16 +1027,13 @@
       backToLobby();
       setStatus('对手已离开');
     });
-    // 通道意外断开(P2P 掉线等): 不再静默翻 mode, 弹「连接断开」让用户手动决策
+    // 通道意外断开(P2P 掉线等)
+    // v166: 对局内仅 P2P 通道 —— 断开不再提供「切换中继」, 直接提示返回大厅
     Net.on('disconnected', () => {
       if (game.mode === 'offline') return;
       exitConfirmMode = false;
-      showNetChoice('连接断开', '与对手的连接中断了。\n\n可切换中继通道继续(延迟≈500ms, 对战将严重卡顿、几乎不可玩); 或直接返回大厅。',
-        () => {
-          Net.switchToRelay();
-          showOverlay('切换中', '正在通过中继通道恢复连接...', '', { cancelable: true, cancelLabel: '返回大厅' });
-        },
-        () => { hideOverlay(); Net.close(); backToLobby(); });
+      showOverlay('连接已断开', '对局仅支持 P2P 直连通道。\n\n连接已中断, 请返回大厅重新加入。', '',
+        { cancelable: true, cancelLabel: '返回大厅' });
     });
     // 连接阶段 P2P 连不上: 自动重试耗尽后弹出「切换中继(高延迟)」按钮(显式兜底)
     Net.on('relayOffered', () => {
@@ -1072,6 +1069,10 @@
   // ===== 更新公告: 点击版本号显示近三次更新(倒序: 最新在前; 每条用短句概括改动, 一点一换行; 每次发版须 prepend 一条真实版本) =====
   // 文案规则: 每条不超过 30 字, 一条一个圆点, 折行不再出点(见 .cl-pt 悬挂缩进)
   const CHANGELOG = [
+    ['v166', [
+      '对局内仅P2P: 断开不再提供切换中继, 直接提示返回大厅',
+      'switchToRelay加对局守卫(已进对局禁止切中继, 双保险)'
+    ]],
     ['v165', [
       '通道标签两端一致: 任一侧TURN中继即显示中继(不再误导)',
       'host STUN失败只留relay候选是延迟高的根因, 待换浏览器验证'
