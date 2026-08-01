@@ -264,6 +264,9 @@ const Net = (() => {
   // P2P 无限重试: 每次间隔 P2P_RETRY_GAP, 永不放弃(用户可手动点「切换中继」或「返回大厅」)
   // v162: 重试前清理旧未完成连接 —— 保持"单连接 ICE 协商"(对齐 v109), 避免多个并发 DataConnection
   // 同时收集候选/互相干扰, 那会降低 NAT 穿透成功率(穿透成功才走真 P2P 低延迟, 失败只能中继高延迟)
+  // [v193] reliable: false —— 状态/输入改不可靠通道(丢帧不重传): 根治"家宽丢包→SCTP重传堆积→延迟滚雪球上千"振荡。
+  //   30Hz 状态每帧覆盖, 丢一帧被下一帧顶掉视觉无感; 控制消息(start/reset/rmt/选风格等)靠 v181 双通道
+  //   (P2P+MQTT)冗余兜底, 不受影响。坏网体验: 丢帧(偶发瞬移) 而非 卡顿上千。
   function _tryP2pConnect() {
     if (handshaked) return;
     if (!peer || peer.destroyed) return;
@@ -272,7 +275,7 @@ const Net = (() => {
     conn = null;
     p2pConnectAttempts++;
     progress('P2P 直连尝试 ' + p2pConnectAttempts + ' 次...');
-    const c = peer.connect(PEER_PREFIX + roomCode, { reliable: true, serialization: 'json' });
+    const c = peer.connect(PEER_PREFIX + roomCode, { reliable: false, serialization: 'json' });
     conn = c; bindConn(c);
     p2pRetryTimer = setTimeout(() => {
       if (handshaked) return;
