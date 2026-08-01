@@ -94,7 +94,12 @@ const Net = (() => {
   let _joinReject = null;  // client joinRoom 的 rejector(用户取消时调用)
   let p2pRetryTimer = null;
   let p2pConnectAttempts = 0;
-  const P2P_RETRY_GAP = 8000;  // v163: 8s 重试间隔(对齐 v109 单连接协商哲学: ICE 收集TURN/STUN候选+穿透检查需2-6s, 1.5s 太短会放弃未完成的协商 → 进不去房间)
+  const P2P_RETRY_GAP = 8000;   // 首轮重试间隔(快场景快速抽签)
+  const P2P_RETRY_GAP_SLOW = 20000; // v178: 慢速协商长宽限(对齐 v109"宁等多几秒也要 P2P"哲学)
+  // 为什么需要 20s 长轮: 跨网对称 NAT 时 TURN 分配 + 多候选逐对测试可能需 8-20s 才完成协商,
+  //   8s 就重开连接会反复打断未完成的协商 → 穿透失败(只能中继)。
+  //   前 2 轮 8s 快速尝试(快场景), 之后 20s 长轮给慢速协商充足时间(穿透成功率↑)。
+  //   真连不上则 20s 一轮无限重试, 用户可随时返回大厅。
   let keepAliveTimer = null;
   let pingTimer = null;
   let playerName = '';
@@ -219,7 +224,7 @@ const Net = (() => {
     p2pRetryTimer = setTimeout(() => {
       if (handshaked) return;
       _tryP2pConnect();   // 永不放弃, 持续重试 P2P
-    }, P2P_RETRY_GAP);
+    }, p2pConnectAttempts <= 2 ? P2P_RETRY_GAP : P2P_RETRY_GAP_SLOW);
   }
 
   // 用户取消连接(返回大厅): 解阻塞 joinRoom
