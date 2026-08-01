@@ -12,82 +12,20 @@
 // 说明: 中继经公共 MQTT broker(EMQX/HiveMQ), 实测 RTT≈500ms, 对实时格斗几乎不可玩,
 //   故仅作"能连上但卡"的最后手段, 绝不静默接管。
 
-// ⚠️ 跨网能玩的关键: 必须有一个「活的」TURN 服务器做 NAT 穿透。
-// v160 起: region=japan 日本节点(实测对国内 TCP 延迟最低 ~220ms, 优于 sg ~300-400 / global ~280-395)
-//   v158 曾用 region=global(就近路由), 但实测 global 对国内路由不佳(158.247.200.82), 用户测出 1500+ms。
-// v155 关键修正(REST API 实测确认):
-//   1. 凭据是账户级, 各区域都能用(global/sg/jp 均 Allocate 实测成功)
-//   2. API key 4abe49...(zmrly321456 凭据的 key, 已验证有效)
-//   3. TURN 端口: 80(udp/tcp) + 443(udp) + 443(tls); STUN: stun.relay.metered.ca:80
-// [v186] 自建国内 TURN 上线(北京 59.110.237.91, apt coturn 4.6.1, UDP 3478 Allocate 实测成功):
-//   国内玩家延迟预期 10-30ms(对比 jp Metered 220ms+, 跨网体验质变); 自建挂了自动回退下方 jp/sg/global。
-//   注: 免费期至 2026-09-01(阿里云轻量 1 个月免费), 到期后若未续费, 该 IP 失效, 自动回退 Metered。
-// 动态拉取失败(网络/CORS)时回退到下方 TURN_SERVERS_FALLBACK(自建国内 TURN 优先 + jp/sg/global 兜底)。
-const METERED_TURN_API = 'https://zmrly5555.metered.live/api/v1/turn/credentials?apiKey=4abe49e452ba47643a733c4b71c10063eac9&region=japan';
-const TURN_SERVERS_FALLBACK = [
-  // [v186] 自建国内 TURN(北京, UDP 3478) — 跨网中继延迟从 1000ms+ 砸到 10-30ms(对比 jp Metered 220ms+)
+// ⚠️ [v189] 强制中继模式(用户拍板 2026-08-01): 联机仅走自建北京 TURN 中继, 删除 P2P 直连路径。
+//   1. iceTransportPolicy: 'relay' —— 只允许 relay 候选, 禁止 host/srflx 直连(彻底告别"P2P路径抽签/抖动")
+//   2. ICE 服务器仅自建北京机房 59.110.237.91(pma), 删 Metered 动态拉取 / jp/sg/global 兜底 / STUN 列表
+//   3. 北京↔北京固定机房链路 20-40ms, 两端对称稳定; 无需 NAT 穿透(走中继天然可连)
+//   ⚠️ 单点依赖: 服务器挂 或 2026-09-01 免费期到期未续费 → 联机瘫痪(用户已权衡确认)。
+//   备份: backup-v188-27fa4d8(回退: git checkout backup-v188-27fa4d8 -- js/net.js js/main.js index.html)
+const TURN_SERVERS = [
   { urls: 'turn:59.110.237.91:3478?transport=udp', username: 'pma', credential: '94e0013bacd62748' },
-  // ⚠️ v176: 移除 v175 帮手的"国内免费 TURN" 43.138.235.180:9002(zhaosonghan.com 博客配置)
-  //   实测 UDP/TCP 9002 均无响应(死服务器, turn_verify.py 多次超时) —— ping 通 ≠ TURN 可用。
-  //   教训: 第三方博客分享的公共 TURN 大概率已失效, 必须 TURN Allocate 实测通过才能接入。
-  // 静态兜底(REST API 不可达时): 日本优先(实测延迟最低) + 新加坡/global 兜底(凭据 5bd3b7... 均 Allocate 实测成功)
-  // [v185] UDP 条目全部前置(低延迟优先), TCP/TLS 保留尾部兜底(防火墙禁 UDP 时仍可用)
-  { urls: 'turn:jp.relay.metered.ca:80', username: '5bd3b785c789d8a13597e5bf', credential: 'VI7kyJaVnLrlIcLU' },
-  { urls: 'turn:jp.relay.metered.ca:443', username: '5bd3b785c789d8a13597e5bf', credential: 'VI7kyJaVnLrlIcLU' },
-  { urls: 'turn:sg.relay.metered.ca:80', username: '5bd3b785c789d8a13597e5bf', credential: 'VI7kyJaVnLrlIcLU' },
-  { urls: 'turn:sg.relay.metered.ca:443', username: '5bd3b785c789d8a13597e5bf', credential: 'VI7kyJaVnLrlIcLU' },
-  { urls: 'turn:global.relay.metered.ca:80', username: '5bd3b785c789d8a13597e5bf', credential: 'VI7kyJaVnLrlIcLU' },
-  { urls: 'turn:jp.relay.metered.ca:80?transport=tcp', username: '5bd3b785c789d8a13597e5bf', credential: 'VI7kyJaVnLrlIcLU' },
-  { urls: 'turns:jp.relay.metered.ca:443?transport=tcp', username: '5bd3b785c789d8a13597e5bf', credential: 'VI7kyJaVnLrlIcLU' }
-];
-// [v187] 自建国内 TURN 单独成组, 插入「动态拉取成功」结果的最前。
-//   此前 API 拉取成功时只返回 Metered jp(海外 1000ms+), 自建服务器白部署 —— 现强制自建优先。
-const TURN_SELF_HOSTED = [
-  { urls: 'turn:59.110.237.91:3478?transport=udp', username: 'pma', credential: '94e0013bacd62748' }
-];
-const STUN_SERVERS = [
-  // [v186] 自建 coturn 自带 STUN(国内 10-30ms) 提到最前, 提升国内网络 srflx 收集成功率
-  { urls: 'stun:59.110.237.91:3478' },
-  // [v173] 国内 STUN 优先: STUN 只问"公网映射地址", 海外 STUN 被墙时收集不到 srflx 会降低穿透成功率;
-  //   国内 STUN 可达性更稳 → 提到最前(并行请求, 失败自动跳过, 海外兜底)。
-  //   部署国内 coturn 后把下面这行加进来(它自带 STUN): { urls: 'stun:你的服务器IP:3478' }
-  { urls: 'stun:stun.qq.com:3478' },
-  { urls: 'stun:stun.miwifi.com:3478' },
-  { urls: 'stun:stun.relay.metered.ca:80' },
-  { urls: 'stun:stun.l.google.com:19302' },
-  { urls: 'stun:stun1.l.google.com:19302' },
-  { urls: 'stun:stun2.l.google.com:19302' },
-  { urls: 'stun:stun3.l.google.com:19302' },
-  { urls: 'stun:stun4.l.google.com:19302' },
-  { urls: 'stun:global.stun.twilio.com:3478' }
+  { urls: 'turn:59.110.237.91:3478?transport=tcp', username: 'pma', credential: '94e0013bacd62748' }
 ];
 
-// 动态构建 ICE 配置: 优先用 Metered REST API 返回的实时 TURN(主机/凭据都由 Metered 给, 不靠猜), 失败回退静态
-// 返回 Promise<{iceServers, iceTransportPolicy}>, 始终 resolve(不会阻塞连接)
+// [v189] 强制中继: 恒定返回自建北京 TURN + relay 策略(无需动态拉取/回退/超时, 同步返回 Promise)
 function buildIceServers() {
-  return new Promise((resolve) => {
-    let done = false;
-    const ok = (ice) => { if (done) return; done = true; resolve(ice); };
-    const fallback = () => ok({ iceServers: [...STUN_SERVERS, ...TURN_SERVERS_FALLBACK], iceTransportPolicy: 'all' });
-    try {
-      fetch(METERED_TURN_API, { cache: 'no-store' })
-        .then((r) => r.json())
-        .then((servers) => {
-          // Metered 在 key 无效/无权限时返回 {error:...} 而非数组 → 立即回退静态, 不卡死
-          if (!servers || servers.error || !Array.isArray(servers) || servers.length === 0) {
-            console.log('[TURN] 动态获取失败(无有效凭据), 用静态兜底');
-            fallback();
-            return;
-          }
-          const turn = servers.filter((s) => s && /turn:/.test(s.urls || ''));
-          console.log('[TURN] 服务已获取(' + turn.length + '条)');
-          ok({ iceServers: [...STUN_SERVERS, ...TURN_SELF_HOSTED, ...servers], iceTransportPolicy: 'all' });
-        })
-        .catch(() => { console.log('[TURN] 动态获取失败, 用静态兜底'); fallback(); });
-    } catch (e) { fallback(); }
-    // 兜底超时: 若 API 卡死(无网络), 5s 后用静态兜底, 不阻塞连接
-    setTimeout(() => { if (!done) { console.log('[TURN] 获取超时, 用静态兜底'); fallback(); } }, 5000);
-  });
+  return Promise.resolve({ iceServers: TURN_SERVERS, iceTransportPolicy: 'relay' });
 }
 
 const PEER_PREFIX = 'pma26-';
