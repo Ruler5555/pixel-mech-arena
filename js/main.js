@@ -103,6 +103,8 @@
   let clientPickId = null;   // client 选的机甲 AI 风格(host 侧收集)
   let aiLocalPickId = null;  // 当前玩家(无论 host/client)选的风格
   let aiConfirmed = false;   // client 是否已把风格发给房主(用于按钮文案/可重选)
+  let aiPickAckTimer = null; // v174: client 发送 aipick 后的确认重发定时器
+  let aiPickAckCount = 0;    // v174: 已重发次数(2s 一次, 最多 5 次)
   let currentRoomCode = '';  // 当前房号(选风格屏返回等待大厅时需要)
   let peerName = '';         // 对手昵称(从选风格屏返回等待大厅时恢复 slot 显示)
   // [关键] 本机角色标记, 在发起建房/加入的【同一个同步语句块】里就置位。
@@ -438,6 +440,8 @@
   }
   function hideRoomLobby() {
     roomLobby.classList.add('hidden');
+    // v174: 离开房间清 aipick 确认重发定时器
+    clearTimeout(aiPickAckTimer); aiPickAckTimer = null; aiPickAckCount = 0;
     // 停止世界分享
     if (sharedToWorld) {
       const code = roomLobbyCode.textContent;
@@ -767,7 +771,19 @@
     }
     // client: 确认 / 重选(允许反复改, 房主以最后一次为准)
     if (!aiLocalPickId) { aiPickStatus.textContent = '请先选一个你的机甲风格'; return; }
-    Net.sendAiPick(aiLocalPickId);
+    // v174: 应用层确认 —— aipick 是低频一次性消息, 中继(对称NAT/TURN)下 SCTP 丢一条就永久丢
+    // (host 的 aips 有补发, client 的 aipick 此前裸发一次)。现在: 发送后启动 2s 定时重发(至多 5 次),
+    // host 收到后回 aipickack, client 收到 ack 才停止重发并显示"房主已收到"。
+    const sendPick = () => { Net.sendAiPick(aiLocalPickId); };
+    sendPick();
+    aiPickAckCount = 0;
+    clearTimeout(aiPickAckTimer);
+    aiPickAckTimer = setTimeout(function tick() {
+      if (aiPickAckCount >= 5) { aiPickAckTimer = null; return; } // 5 次仍无回执, 放弃(等用户手动重发)
+      aiPickAckCount++;
+      if (Net.isConnected()) sendPick();
+      aiPickAckTimer = setTimeout(tick, 2000);
+    }, 2000);
     aiConfirmed = true;
     updateAIPickStatus();
   });
@@ -814,8 +830,10 @@
       btnAIStart.classList.toggle('waiting', !(hostPickId && clientPickId));
     } else {
       aiPickStatus.textContent = '你的AI: ' + myName +
-        (aiConfirmed ? ' ｜ 已确认, 等待房主开打' : (aiLocalPickId ? ' ｜ 点下方确认' : ' ｜ 请选择一个风格'));
-      btnAIStart.textContent = aiConfirmed ? '已确认 ✓ 点击可重发' : '确认风格';
+        (aiPickAckTimer && aiPickAckCount > 0 ? ' ｜ 已发送, 等待房主确认...' :
+          (aiConfirmed ? ' ｜ 房主已收到 ✓ 等待开打' :
+            (aiLocalPickId ? ' ｜ 点下方确认' : ' ｜ 请选择一个风格')));
+      btnAIStart.textContent = (aiConfirmed && !aiPickAckTimer) ? '已确认 ✓ 点击可重发' : '确认风格';
       btnAIStart.classList.toggle('waiting', !aiLocalPickId);
     }
   }
@@ -972,6 +990,15 @@
       if (myRole !== 'host' || roomMode !== 'ai') return;
       clientPickId = id || 'balanced';
       updateAIPickStatus();
+      // v174: 应用层确认回执 —— client 收到 ack 才停止重发, 根治中继下确认丢失
+      Net.sendAiPickAck();
+    });
+    Net.on('aipickack', () => {
+      // client 收到 host 回执: 停止重发, 显示已送达
+      if (myRole !== 'client' || roomMode !== 'ai') return;
+      clearTimeout(aiPickAckTimer); aiPickAckTimer = null; aiPickAckCount = 0;
+      aiConfirmed = true;
+      updateAIPickStatus();
     });
     Net.on('aistart', (cfg) => {
       // client 收到: 双方风格下发, 开始观战对打
@@ -1042,6 +1069,10 @@
   // ===== 更新公告: 点击版本号显示近三次更新(倒序: 最新在前; 每条用短句概括改动, 一点一换行; 每次发版须 prepend 一条真实版本) =====
   // 文案规则: 每条不超过 30 字, 一条一个圆点, 折行不再出点(见 .cl-pt 悬挂缩进)
   const CHANGELOG = [
+    ['v174', [
+      '修复AI选风格房主收不到确认: aipick加应用层确认(host回ack)',
+      'client未收到回执2s自动重发(至多5次), 中继下不再永久丢'
+    ]],
     ['v173', [
       'STUN国内优先(QQ/小米在前): 海外STUN被墙也能收到srflx, 提升穿透成功率',
       '部署国内coturn后其自带STUN可直接填入(见net.js注释)'

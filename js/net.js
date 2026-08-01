@@ -102,7 +102,7 @@ const Net = (() => {
     open: [], connected: [], state: [], input: [], close: [],
     progress: [], error: [], start: [],
     reset: [], rematchReady: [],
-    aimode: [], aipick: [], aistart: [], aipickstart: [], aicancel: [],
+    aimode: [], aipick: [], aipickack: [], aistart: [], aipickstart: [], aicancel: [],
 
   };
   function on(ev, fn) { (handlers[ev] || []).push(fn); }
@@ -271,6 +271,7 @@ const Net = (() => {
     else if (msg.t === 'rmt') emit('rematchReady');
     else if (msg.t === 'aimode') emit('aimode');
     else if (msg.t === 'aipick') emit('aipick', msg.id);
+    else if (msg.t === 'aipickack') emit('aipickack');   // v174: host 已收到 client 风格确认(应用层确认)
     else if (msg.t === 'aistart') emit('aistart', msg.cfg);
     else if (msg.t === 'aips') emit('aipickstart');
     else if (msg.t === 'aicxl') emit('aicancel');
@@ -365,6 +366,7 @@ const Net = (() => {
   // ===== AI 对战观战模式专用消息 =====
   function sendAiMode() { send({ t: 'aimode' }); }
   function sendAiPick(id) { send({ t: 'aipick', id }); }
+  function sendAiPickAck() { send({ t: 'aipickack' }); }   // v174: host 回执, client 据此停止重发
   function sendAiStart(cfg) { send({ t: 'aistart', cfg }); }
   function sendAiPickStart() { send({ t: 'aips' }); }
   function sendAiCancel() { send({ t: 'aicxl' }); }
@@ -396,7 +398,7 @@ const Net = (() => {
   return {
     on, hostRoom, joinRoom, abortJoin,
     sendState, sendInput, sendReset, sendBye, sendStart, sendRematchReady,
-    sendAiMode, sendAiPick, sendAiStart, sendAiPickStart, sendAiCancel,
+    sendAiMode, sendAiPick, sendAiPickAck, sendAiStart, sendAiPickStart, sendAiCancel,
     setName, getRole, isConnected, getRoomCode, getMode, getRtt, getStateChannel, getChannelDetail, close
   };
 })();
