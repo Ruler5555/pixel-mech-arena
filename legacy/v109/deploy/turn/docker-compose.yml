@@ -1,0 +1,15 @@
+version: "3.8"
+
+# PIXEL MECH ARENA · 自托管 TURN 服务器 (coturn)
+# 作用: 根治"对称 NAT"用户被迫走公共 broker 中继导致的高延迟(200ms+)
+# 部署: 在一台有公网 IP 的服务器上执行 `docker compose up -d`
+services:
+  coturn:
+    image: coturn/coturn:latest
+    container_name: pma-turn
+    network_mode: host            # host 模式直通, 免去端口映射烦恼(需 Docker 支持)
+    restart: unless-stopped
+    volumes:
+      - ./coturn.conf:/etc/coturn/turnserver.conf:ro
+    # 配置已在 coturn.conf 内, 这里仅指定配置文件
+    command: -c /etc/coturn/turnserver.conf
