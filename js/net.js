@@ -89,7 +89,7 @@ const Net = (() => {
     return new Promise((resolve, reject) => {
       role = 'host'; roomCode = genCode(); handshaked = false; mode = 'p2p';
 
-      progress('正在获取 TURN 穿透服务...');
+      progress('正在准备 P2P 直连...');
       buildIceServers().then((ice) => {
       let resolved = false;
       const finish = (code) => {
@@ -137,7 +137,7 @@ const Net = (() => {
     return new Promise((resolve, reject) => {
       role = 'client'; roomCode = code; handshaked = false; mode = 'p2p';
 
-      progress('正在获取 TURN 穿透服务...');
+      progress('正在准备 P2P 直连...');
       _joinResolve = (c) => { resolve(c); };
       _joinReject = (e) => { reject(e); };
       buildIceServers().then((ice) => {
