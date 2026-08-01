@@ -429,8 +429,9 @@ class Game {
     if ((this.mode === MODES.HOST || this.mode === MODES.AI_HOST) && Net.isConnected()) {
       this.syncAcc += dt;
       // [v177] 中继降频双保险: getChannelDetail(getStats轮询)在部分浏览器失效 → 加 RTT 兜底。
-      // rtt>150ms(中继/丢包特征)或检测到 relay → 15Hz; 直连低延迟 → 30Hz。
-      const hz = (Net.getRtt() > 150 || Net.getChannelDetail() === 'relay') ? 15 : 30;
+      // [v185] 中继 15Hz→10Hz: 进一步降低中继丢包重传压力(用户实测中继链路 1000ms+, 降频减轻堆积)。
+      //   rtt>150ms(中继/丢包特征)或检测到 relay → 10Hz; 直连低延迟 → 30Hz。
+      const hz = (Net.getRtt() > 150 || Net.getChannelDetail() === 'relay') ? 10 : 30;
       if (this.syncAcc >= 1 / hz) {
         this.syncAcc = 0;
         Net.sendState(this._serializeState());
