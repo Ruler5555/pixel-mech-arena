@@ -428,10 +428,10 @@ class Game {
     // ===== host / aiHost: 定时广播 state =====
     if ((this.mode === MODES.HOST || this.mode === MODES.AI_HOST) && Net.isConnected()) {
       this.syncAcc += dt;
-      // [中继降码率] 公共 MQTT broker 吞吐有限, 30Hz 满速发会在 broker 侧堆积队列,
-      // 延迟从 ~150ms 一路累积到 500ms+(正是「中继连上后 500 延迟」的真正原因, 不是链路 RTT)。
-      // 中继下降到 15Hz, 队列不堆积, 延迟回落; 接收端配合位置插值, 视觉反而更顺。P2P 仍 30Hz。
-      const hz = (Net.getMode() === 'relay') ? 15 : 30;
+      // [v172] 中继降频改用真实通道检测(v167 删 MQTT 后 getMode() 恒 'p2p', 原判断失效致中继也 30Hz 满速
+      // → 配合可靠通道丢包重传, 发送缓冲无限堆积, 延迟滚雪球到 5000ms+)。
+      // getChannelDetail()==='relay'(ICE 实际走 TURN 中继)时降 15Hz, 队列不堆积, 延迟回落。
+      const hz = (Net.getChannelDetail() === 'relay') ? 15 : 30;
       if (this.syncAcc >= 1 / hz) {
         this.syncAcc = 0;
         Net.sendState(this._serializeState());

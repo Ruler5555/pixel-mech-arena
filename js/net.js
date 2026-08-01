@@ -342,7 +342,18 @@ const Net = (() => {
     obj.q = ++sendSeq;
     if (conn && conn.open) { try { conn.send(obj); } catch (e) {} return; }
   }
-  function sendState(s) { send({ t: 'state', s }); }
+  // [v172] 状态包缓冲堆积保护: 可靠通道在对端慢/丢包时, SCTP 重传会让发送缓冲无限堆积,
+  //   延迟从链路基线(~220ms)滚雪球到 5000ms+(中继+手机流量丢包的实况)。
+  //   检测 DataChannel.bufferedAmount 超阈值(≈40 个状态包) → 丢弃本帧: 状态 30Hz 每帧覆盖,
+  //   丢 1-2 帧视觉无感(客户端有插值), 但队列不再无限堆积, 延迟打回基线。
+  function _stateBufferedHigh() {
+    try {
+      const dc = conn && (conn.dataChannel || conn._dc);
+      if (dc && typeof dc.bufferedAmount === 'number' && dc.bufferedAmount > 8000) return true;
+    } catch (e) {}
+    return false;
+  }
+  function sendState(s) { if (_stateBufferedHigh()) return; send({ t: 'state', s }); }
   function sendInput(c) { send({ t: 'input', c }); }
   function sendReset() { send({ t: 'reset' }); }
   function sendBye() { send({ t: 'bye' }); }
