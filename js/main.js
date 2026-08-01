@@ -169,11 +169,8 @@
       else if (Net.getChannelDetail() === 'relay') m = 'TURN中继';
       else if (Net.getChannelDetail() === 'direct') m = 'P2P直连';
       else m = 'P2P(未知)';  // v188: 兜底诚实标未知(原'P2P'会把getStats读不到误报为直连)
-      if (game.mode === 'offline' && !myRole) {
+      if (game.mode === 'offline') {
         el.textContent = '离线 vs AI';
-      } else if (game.mode === 'offline' && myRole) {
-        // [v190] 连接期(myRole 已置位但 game.mode 未切): 不再误显示"离线 vs AI"
-        el.textContent = (myRole === 'client' ? '客户端 · 连接中' : '主机 · 连接中');
       } else if (game.mode === 'host' || game.mode === 'aiHost') {
         el.textContent = (game.mode === 'aiHost' ? 'AI房主 · ' : '主机 · ') + (Net.isConnected() ? m : m + ' 等待中');
       } else if (game.mode === 'client' || game.mode === 'aiClient') {
@@ -184,7 +181,7 @@
     setMode(aiPickModeTag);
     const setRtt = (el) => {
       if (!el) return;
-      if (game.mode === 'offline' && !myRole) { el.textContent = '本地'; el.className = 'rtt-tag'; return; }
+      if (game.mode === 'offline') { el.textContent = '本地'; el.className = 'rtt-tag'; return; }
       const r = Net.getRtt();
       if (r > 0) { el.textContent = '延迟 ' + r + 'ms'; el.className = 'rtt-tag ' + (r < 80 ? 'good' : r < 150 ? 'ok' : 'bad'); }
       else { el.textContent = '测速中…'; el.className = 'rtt-tag'; }
@@ -386,7 +383,7 @@
       return '<div class="world-item" data-code="' + r.roomCode + '">' +
         '<div class="world-item-top">' +
           '<span class="world-item-code">' + r.roomCode + '</span>' +
-          '<span class="world-item-mode">' + ((r.mode && r.mode.indexOf('未知') === -1) ? r.mode : '联机') + '</span>' +
+          '<span class="world-item-mode">' + (r.mode || 'P2P') + '</span>' +
         '</div>' +
         '<div class="world-item-name">' + (r.playerName || '玩家') + '</div>' +
         '<div class="world-item-time">' + timeStr + '</div>' +
@@ -859,9 +856,9 @@
     }
   }
   function startAIMatch() {
-    // [v190] v189 强制中继模式下, 对战数据通道(TURN)未建立时禁止开战; 文案改为中继语境(v181残留文案已过时)
+    // v181: 对局数据仅走 P2P/TURN 通道 —— 直连通道未建立时禁止开战
     if (!Net.isP2PReady()) {
-      showOverlay('正在建立对战通道', '对手已进房, TURN 中继通道建立中...\n\n(对局数据经北京机房中继, 请稍候几秒再点「开始对战」)', '', { cancelable: true, cancelLabel: '返回大厅' });
+      showOverlay('正在建立对局通道', '对手已进房, P2P 直连通道建立中...\n\n请稍候几秒再点「开始对战」\n(对局数据仅走直连通道, 不会走中继)', '', { cancelable: true, cancelLabel: '返回大厅' });
       return;
     }
     game.setMode('aiHost');
@@ -1095,17 +1092,9 @@
   // ===== 更新公告: 点击版本号显示近三次更新(倒序: 最新在前; 每条用短句概括改动, 一点一换行; 每次发版须 prepend 一条真实版本) =====
   // 文案规则: 每条不超过 30 字, 一条一个圆点, 折行不再出点(见 .cl-pt 悬挂缩进)
   const CHANGELOG = [
-    ['v191', [
-      '恢复TURN双通道(UDP+TCP)提升中继连接成功率',
-      '加连接诊断:卡住时状态栏显示ICE状态定位'
-    ]],
-    ['v190', [
-      '修复强制中继连接慢:移除死TCP条目只留UDP',
-      '开战提示改中继文案+连接期不误报离线'
-    ]],
-    ['v189', [
-      '强制中继联机:只走北京机房,告别P2P抖动',
-      '删除直连/Metered路径,延迟稳定20-40ms'
+    ['v192', [
+      '回退v189-v191强制中继(P2P优先+自建TURN兜底)',
+      '强制中继浏览器侧通道建立问题待后续深挖'
     ]],
     ['v188', [
       '修正通道标签:读不到时标P2P(未知)不再误报直连',
