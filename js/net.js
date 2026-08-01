@@ -19,9 +19,10 @@
 //   ⚠️ 单点依赖: 服务器挂 或 2026-09-01 免费期到期未续费 → 联机瘫痪(用户已权衡确认)。
 //   备份: backup-v188-27fa4d8(回退: git checkout backup-v188-27fa4d8 -- js/net.js js/main.js index.html)
 const TURN_SERVERS = [
-  // [v190] 仅 UDP 条目: 服务器 coturn 只监听 UDP(实测 TCP 3478 无响应), TCP 条目会让浏览器
-  //   在 relay 模式下尝试 TCP 分配失败/超时 → 拖慢甚至卡死 ICE 协商(客户端卡大厅/开战被拦)。
-  { urls: 'turn:59.110.237.91:3478?transport=udp', username: 'pma', credential: '94e0013bacd62748' }
+  // [v191] UDP+TCP 双通道(服务器 coturn 双监听实测确认; v190 误删 TCP 条目——当时沙箱 TCP 超时是
+  //   沙箱网络限制非服务器问题)。家宽/运营商对 UDP 限速丢包常见, 双通道保障 relay 分配成功率。
+  { urls: 'turn:59.110.237.91:3478?transport=udp', username: 'pma', credential: '94e0013bacd62748' },
+  { urls: 'turn:59.110.237.91:3478?transport=tcp', username: 'pma', credential: '94e0013bacd62748' }
 ];
 
 // [v189] 强制中继: 恒定返回自建北京 TURN + relay 策略(无需动态拉取/回退/超时, 同步返回 Promise)
@@ -57,6 +58,7 @@ const Net = (() => {
   let playerName = '';
   let _channelDetail = '';    // v164: 真实 ICE 通道 ''未知 / 'direct'直连 / 'relay'TURN中继
   let _channelTimer = null;   // v164: 轮询 selected candidate pair 的定时器
+  let _diagTimer = null;      // [v191] 连接诊断: 8s 未握手 → 状态栏输出 ICE 状态定位卡点
   // [v181] MQTT 仅保进房: P2P 20s 未握手才启动 MQTT 兜底(只承载握手+低频控制消息,
   //   对局数据 state/input 永不走 MQTT)。P2P/TURN 连上即正常对局(对齐 v110 的"保联机房"设计)。
   let mqttClient = null;      // MQTT 兜底客户端(EMQX/HiveMQ 公共 broker)
@@ -77,9 +79,20 @@ const Net = (() => {
   function genCode() { return String(Math.floor(100000 + Math.random() * 900000)); }
 
   // ============ 握手出口(连接那一刻锁定通道) ============
+  // [v191] 连接诊断: 信令就绪后 8s 仍未握手 → 状态栏输出 ICE 状态(connecting=卡TURN分配/failed=TURN不可用)
+  function _startDiagTimer() {
+    clearTimeout(_diagTimer);
+    _diagTimer = setTimeout(() => {
+      if (handshaked) return;
+      let ice = 'no-pc';
+      try { if (conn && conn._pc) ice = conn._pc.iceConnectionState || 'unknown'; } catch (e) {}
+      progress('连接诊断: ICE=' + ice + ' | TURN ' + TURN_SERVERS.length + '条 | 尚未握手');
+    }, 8000);
+  }
   function _emitConnected(payload, ch) {
     if (handshaked) return; // v181: 幂等 —— P2P/MQTT 双通道 hello 只会触发一次 connected
     handshaked = true;
+    clearTimeout(_diagTimer); _diagTimer = null;
     if (ch) mode = ch;                 // 锁定 / 更新传输通道(一次性决策)
     clearTimeout(p2pRetryTimer); p2pRetryTimer = null;
     clearTimeout(relayDeadline); relayDeadline = null; // v181: 握手完成, MQTT 兜底不再需要
@@ -128,6 +141,7 @@ const Net = (() => {
         clearTimeout(signalRetryTimer); clearTimeout(signalFailTimer);
         progress('信令已就绪, 等待对手(P2P 直连优先)...');
         finish(roomCode);
+        _startDiagTimer(); // [v191] 8s 未握手输出诊断
         // v181: 20s 未握手 → 启动 MQTT 兜底(仅保进房, 不承载对局数据)
         relayDeadline = setTimeout(() => { if (!handshaked) _startRelayListen(roomCode); }, 20000);
       });
@@ -185,6 +199,7 @@ const Net = (() => {
         peer.on('open', () => {
           clearTimeout(signalFailTimer);
           progress('信令已就绪, 正在尝试 P2P 直连...');
+          _startDiagTimer(); // [v191] 8s 未握手输出诊断
           _tryP2pConnect();
           // v181: 20s 未握手 → 启动 MQTT 兜底(仅保进房, 不承载对局数据)
           relayDeadline = setTimeout(() => { if (!handshaked) _startRelayListen(code); }, 20000);
@@ -481,6 +496,7 @@ const Net = (() => {
     clearTimeout(p2pRetryTimer); p2pRetryTimer = null;
     _stopPingMonitor();
     clearInterval(_channelTimer); _channelTimer = null; _channelDetail = '';
+    clearTimeout(_diagTimer); _diagTimer = null; // [v191] 清理诊断定时器
     // v181: 清理 MQTT 兜底
     try { if (mqttClient) { mqttClient.end(true); } } catch (e) {}
     mqttClient = null; relayTopic = null;
