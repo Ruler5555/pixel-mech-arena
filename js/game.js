@@ -212,10 +212,14 @@ class Game {
     this.interp = {
       buffer: [],          // [{ t: 收包时间(s), d: 序列化机甲 }]
       delay: 0.10,         // 渲染延迟 100ms(与 30Hz 广播配合, 约缓冲 3 帧)
-      prevFoeHp: undefined // 上一帧回放的对手血量, 用于对齐受伤 FX
+      prevFoeHp: undefined, // 上一帧回放的对手血量, 用于对齐受伤 FX
+      // [v197] 自适应抖动缓冲: jitEMA=帧到达间隔抖动估计(EMA), lastT=上次收包时间
+      //   跨网中继 jitter 打穿固定缓冲是"延迟稳但画面偶尔卡"的根因 —— 缓冲深度随 jitter 自动调整
+      jitEMA: 0.04,
+      lastT: 0
     };
     // [v195] AI 观战端: 两台机甲同样走渲染延迟缓冲+双快照插值(替代硬套, 根治丢帧时攻击/命中特效抖动)
-    this.specInterp = { b1: [], b2: [], prevHp1: undefined, prevHp2: undefined, init: false, delay: 0.10 };
+    this.specInterp = { b1: [], b2: [], prevHp1: undefined, prevHp2: undefined, init: false, delay: 0.10, jitEMA: 0.04, lastT: 0 };
     // 输入变化检测(减少带宽: 只在输入变化时发送)
     this._lastSentInput = null;
     this._inputSendAcc = 0;
@@ -509,6 +513,12 @@ class Game {
       this._lastStateFrame = s.frame;
     }
     const now = performance.now() / 1000;
+    // [v197] 帧到达间隔抖动估计(EMA): 观战端自适应缓冲深度(上限 200ms 深缓冲, 观战无操作延迟敏感)
+    if (this.specInterp.lastT > 0) {
+      const gap = Math.min(0.5, now - this.specInterp.lastT);
+      this.specInterp.jitEMA = this.specInterp.jitEMA * 0.7 + gap * 0.3;
+    }
+    this.specInterp.lastT = now;
     if (s.p1) { this.specInterp.b1.push({ t: now, d: s.p1 }); if (this.specInterp.b1.length > 30) this.specInterp.b1.shift(); }
     if (s.p2) { this.specInterp.b2.push({ t: now, d: s.p2 }); if (this.specInterp.b2.length > 30) this.specInterp.b2.shift(); }
     // 首帧直接落位(避免从初始点飞入)
@@ -581,7 +591,14 @@ class Game {
   // 这样动画与位移来自同一帧, 跳跃/击退等动作两端完全同步
   _setFoeTarget(m, d) {
     if (!d) return;
-    this.interp.buffer.push({ t: performance.now() / 1000, d });
+    // [v197] 帧到达间隔抖动估计(EMA): 供 _interpFoe 自适应缓冲深度
+    const _now = performance.now() / 1000;
+    if (this.interp.lastT > 0) {
+      const gap = Math.min(0.5, _now - this.interp.lastT); // 上限 500ms 防异常间隔污染
+      this.interp.jitEMA = this.interp.jitEMA * 0.7 + gap * 0.3;
+    }
+    this.interp.lastT = _now;
+    this.interp.buffer.push({ t: _now, d });
     if (this.interp.buffer.length > 30) this.interp.buffer.shift();
   }
   // 对手机甲回放: 从渲染延迟缓冲中取「当前渲染时刻」两侧快照插值
@@ -594,7 +611,13 @@ class Game {
     // 自适应渲染延迟: 按真实 RTT 动态调节缓冲大小(北京本地/同 WiFi 对战 RTT 仅 10~30ms,
     // 硬撑 100ms 缓冲是纯加难受; 高延迟(走中继)时才放大缓冲保「动画+位移永远一致」)
     const rttMs = (typeof Net !== 'undefined' && Net.getRtt) ? Net.getRtt() : 0;
-    this.interp.delay = rttMs <= 0 ? 0.07 : Math.max(0.03, Math.min(0.10, (rttMs / 1000) * 1.2));
+    // [v197] 自适应抖动缓冲: 深度取「RTT 推导」与「帧到达抖动(EMA)」较大者 ——
+    //   同网 jitter 小(10-20ms)→ 缓冲保持 30-60ms 低延迟手感不变;
+    //   跨网中继 jitter 大(50-150ms)→ 缓冲自动加深到 120ms, 吸收尖峰不再卡顿。
+    //   PvP 上限 120ms(对手动作延迟略增, 换来画面稳定)。
+    const _jit = this.interp.jitEMA || 0.04;
+    const _base = Math.max(rttMs > 0 ? (rttMs / 1000) * 1.2 : 0.07, _jit * 1.8);
+    this.interp.delay = Math.max(0.03, Math.min(0.12, _base));
     const buf = this.interp.buffer;
     if (buf.length === 0) return;
     const now = performance.now() / 1000;
@@ -670,7 +693,11 @@ class Game {
   _interpSpecMech(dt, buf, m, idx) {
     if (!buf || buf.length === 0 || !m) return;
     const rttMs = (typeof Net !== 'undefined' && Net.getRtt) ? Net.getRtt() : 0;
-    this.specInterp.delay = rttMs <= 0 ? 0.07 : Math.max(0.03, Math.min(0.10, (rttMs / 1000) * 1.2));
+    // [v197] 自适应抖动缓冲(观战版): 上限 200ms —— 观战无操作延迟敏感, 深缓冲根治中继 jitter 卡顿;
+    //   同网 jitter 小时缓冲自动回到 40-70ms, 观战延迟不虚高。
+    const _jit = this.specInterp.jitEMA || 0.04;
+    const _base = Math.max(rttMs > 0 ? (rttMs / 1000) * 1.2 : 0.07, _jit * 1.8);
+    this.specInterp.delay = Math.max(0.04, Math.min(0.20, _base));
     const now = performance.now() / 1000;
     const renderT = now - this.specInterp.delay;
     // 丢弃远超渲染时刻的旧快照(保留至少 2 个用于插值)
