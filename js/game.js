@@ -214,6 +214,8 @@ class Game {
       delay: 0.10,         // 渲染延迟 100ms(与 30Hz 广播配合, 约缓冲 3 帧)
       prevFoeHp: undefined // 上一帧回放的对手血量, 用于对齐受伤 FX
     };
+    // [v195] AI 观战端: 两台机甲同样走渲染延迟缓冲+双快照插值(替代硬套, 根治丢帧时攻击/命中特效抖动)
+    this.specInterp = { b1: [], b2: [], prevHp1: undefined, prevHp2: undefined, init: false, delay: 0.10 };
     // 输入变化检测(减少带宽: 只在输入变化时发送)
     this._lastSentInput = null;
     this._inputSendAcc = 0;
@@ -320,19 +322,10 @@ class Game {
     // ===== 观战客户端模式(AI 对战): 纯镜像, 不跑本地物理, 不发送输入 =====
     // 两台机甲都由 host 广播, 由 applySpectateState 直接套用(见 net 'state' 回调)
     if (this.mode === MODES.AI_CLIENT) {
-      // [观战插值] 位置不硬套快照, 而是逐帧逼近权威目标 —— 中继 15Hz 下若直接硬套会
-      // 一格一格顿, 插值后视觉接近 60fps。偏差过大(回合重置/传送)则直接拉回不做插值。
-      const k = Math.min(1, dt * 18);
-      [this.p1, this.p2].forEach((m) => {
-        if (!m || m._tx === undefined) return;
-        if (Math.abs(m._tx - m.x) > 120 || Math.abs(m._ty - m.y) > 120) {
-          m.x = m._tx; m.y = m._ty;
-        } else {
-          m.x += (m._tx - m.x) * k;
-          m.y += (m._ty - m.y) * k;
-        }
-        m.onGround = (m.y >= this.groundY - 0.5);
-      });
+      // [v195] 缓冲回放: 两台机甲从渲染延迟缓冲双快照插值(位置平滑+状态事件触发+本地动画时钟推进),
+      //   丢帧由缓冲吸收, 攻击/命中特效不再被网络快照钉死抖动
+      this._interpSpecMech(dt, this.specInterp.b1, this.p1, 0);
+      this._interpSpecMech(dt, this.specInterp.b2, this.p2, 1);
       this.particles = this.particles.filter(p => { p.update(dt); return p.life > 0; });
       return;
     }
@@ -433,8 +426,9 @@ class Game {
       //   rtt>150ms(中继/丢包特征)或检测到 relay → 10Hz; 直连低延迟 → 30Hz。
       // [v194] 加 15Hz 中间档: 北京中继 RTT 仅 40-50ms(<150 不触发 10Hz)+ getChannelDetail vivo 读不到
       //   → 中继之前 30Hz 满速丢帧卡顿。rtt>35 即视为中继/高延迟路径 → 15Hz(v185 前先例: 15Hz 观战反而更顺)。
-      const _r = Net.getRtt();
-      const hz = (_r > 150 || Net.getChannelDetail() === 'relay') ? 10 : (_r > 35 ? 15 : 30);
+      // [v194→v195] 15Hz 档已回退: v193 改 unreliable 后堆积问题已消除, 30Hz 不再滚雪球;
+      //   用户实测 15Hz 观战体验下降 + 特效卡顿与 Hz 无关(观战端缺缓冲插值, v195 已补)
+      const hz = (Net.getRtt() > 150 || Net.getChannelDetail() === 'relay') ? 10 : 30;
       if (this.syncAcc >= 1 / hz) {
         this.syncAcc = 0;
         Net.sendState(this._serializeState());
@@ -503,7 +497,9 @@ class Game {
     if (s.gs !== this.state) this.setState(s.gs);
     this.stateTime = s.gst;
   }
-  // 观战模式(AI 对战): 两台机甲都来自 host 广播, 直接硬套(客户端无本地预测, 30Hz 镜像)
+  // 观战模式(AI 对战): 两台机甲快照压入渲染延迟缓冲, 由 _interpSpecMech 回放插值
+  // [v195] 原直接硬套(_applyMechSpectate)+简单 lerp: 中继丢帧时攻击动画相位被网络快照钉死
+  //   → 攻击/命中特效抖动卡顿。改用与 PvP 对手机甲相同的「缓冲+双快照插值+本地动画时钟推进」。
   applySpectateState(s) {
     if (!s) return;
     // 丢弃过期/重复快照(与 applyRemoteState 同样的去重逻辑)
@@ -512,8 +508,15 @@ class Game {
           this._lastStateFrame - s.frame < 3600) return;
       this._lastStateFrame = s.frame;
     }
-    this._applyMechSpectate(this.p1, s.p1);
-    this._applyMechSpectate(this.p2, s.p2);
+    const now = performance.now() / 1000;
+    if (s.p1) { this.specInterp.b1.push({ t: now, d: s.p1 }); if (this.specInterp.b1.length > 30) this.specInterp.b1.shift(); }
+    if (s.p2) { this.specInterp.b2.push({ t: now, d: s.p2 }); if (this.specInterp.b2.length > 30) this.specInterp.b2.shift(); }
+    // 首帧直接落位(避免从初始点飞入)
+    if (!this.specInterp.init) {
+      this.specInterp.init = true;
+      if (s.p1) this._applyMech(this.p1, s.p1);
+      if (s.p2) this._applyMech(this.p2, s.p2);
+    }
     this.round = s.round;
     this.winsP1 = s.winsP1;
     this.winsP2 = s.winsP2;
@@ -660,6 +663,60 @@ class Game {
     foe.vx = sd.vx; foe.vy = sd.vy;
     if (sd.jc !== undefined) foe.jumpCount = sd.jc;
     foe.onGround = (foe.y >= this.groundY);
+  }
+  // [v195] AI 观战端机甲回放: 渲染延迟缓冲 + 双快照插值(与 _interpFoe 同机制, 泛化到指定机甲/缓冲)
+  //   根治: 原硬套+lerp 在丢帧时攻击动画相位被网络快照钉死 → 攻击/命中特效抖动卡顿。
+  //   idx: 0=p1, 1=p2(用于受伤 FX 的对手位置与血量追踪)
+  _interpSpecMech(dt, buf, m, idx) {
+    if (!buf || buf.length === 0 || !m) return;
+    const rttMs = (typeof Net !== 'undefined' && Net.getRtt) ? Net.getRtt() : 0;
+    this.specInterp.delay = rttMs <= 0 ? 0.07 : Math.max(0.03, Math.min(0.10, (rttMs / 1000) * 1.2));
+    const now = performance.now() / 1000;
+    const renderT = now - this.specInterp.delay;
+    // 丢弃远超渲染时刻的旧快照(保留至少 2 个用于插值)
+    while (buf.length > 2 && buf[0].t < renderT - 0.05) buf.shift();
+    let a = buf[0], b = buf[buf.length - 1];
+    for (let i = 0; i < buf.length - 1; i++) {
+      if (buf[i].t <= renderT && buf[i + 1].t >= renderT) { a = buf[i]; b = buf[i + 1]; break; }
+    }
+    const span = b.t - a.t;
+    const f = span > 0 ? Math.min(1, Math.max(0, (renderT - a.t) / span)) : 0;
+    // 位置: 双快照线性插值, 偏差过大(击退/击飞/回合重置)直接 snap
+    const tx = a.d.x + (b.d.x - a.d.x) * f;
+    const ty = a.d.y + (b.d.y - a.d.y) * f;
+    const dx = tx - m.x, dy = ty - m.y;
+    if (Math.abs(dx) > 60 || Math.abs(dy) > 60) { m.x = tx; m.y = ty; }
+    else { const k = 1 - Math.exp(-dt * 26); m.x += dx * k; m.y += dy * k; }
+    // 离散状态取较近一侧快照
+    const sd = (f >= 0.5) ? b.d : a.d;
+    // 状态切换检测: 事件触发 + 本地动画时钟推进(不再被快照钉死)
+    const jumpEvt = (sd.js !== undefined && sd.js > m.jumpSeq);
+    const stateEvt = (sd.st !== m.state);
+    if (jumpEvt) {
+      m.jumpSeq = sd.js;
+      const isDouble = sd.jc !== undefined && sd.jc >= 2;
+      m.vy = isDouble ? -8.5 : -7.2;
+      m.onGround = false;
+      if (m.state !== 'jump') { m.state = 'jump'; m.hitApplied = false; }
+      m.stateTime = 0; m.frame = 0;
+    } else if (stateEvt) {
+      m.state = sd.st; m.hitApplied = false;
+      m.stateTime = 0; m.frame = 0;
+    }
+    m.stateTime += dt; m.frame += 1;
+    // 受伤 FX 与可见血量同步
+    const prevHp = idx === 0 ? this.specInterp.prevHp1 : this.specInterp.prevHp2;
+    if (prevHp !== undefined && prevHp - sd.hp >= 4) {
+      const otherX = idx === 0 ? this.p2.x : this.p1.x;
+      this._spawnHitFX(m.x + (otherX > m.x ? 20 : -20), m.y - 40, false, (prevHp - sd.hp) >= 15);
+    }
+    if (idx === 0) this.specInterp.prevHp1 = sd.hp; else this.specInterp.prevHp2 = sd.hp;
+    m.facing = sd.f; m.hp = sd.hp;
+    m.flash = sd.fl ? 0.18 : 0;
+    m.cooldown = sd.cd; m.defending = sd.df;
+    m.vx = sd.vx; m.vy = sd.vy;
+    if (sd.jc !== undefined) m.jumpCount = sd.jc;
+    m.onGround = (m.y >= this.groundY);
   }
   // 检测输入是否变化
   _inputChanged(cur, prev) {
