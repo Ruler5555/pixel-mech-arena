@@ -428,10 +428,9 @@ class Game {
     // ===== host / aiHost: 定时广播 state =====
     if ((this.mode === MODES.HOST || this.mode === MODES.AI_HOST) && Net.isConnected()) {
       this.syncAcc += dt;
-      // [v172] 中继降频改用真实通道检测(v167 删 MQTT 后 getMode() 恒 'p2p', 原判断失效致中继也 30Hz 满速
-      // → 配合可靠通道丢包重传, 发送缓冲无限堆积, 延迟滚雪球到 5000ms+)。
-      // getChannelDetail()==='relay'(ICE 实际走 TURN 中继)时降 15Hz, 队列不堆积, 延迟回落。
-      const hz = (Net.getChannelDetail() === 'relay') ? 15 : 30;
+      // [v177] 中继降频双保险: getChannelDetail(getStats轮询)在部分浏览器失效 → 加 RTT 兜底。
+      // rtt>150ms(中继/丢包特征)或检测到 relay → 15Hz; 直连低延迟 → 30Hz。
+      const hz = (Net.getRtt() > 150 || Net.getChannelDetail() === 'relay') ? 15 : 30;
       if (this.syncAcc >= 1 / hz) {
         this.syncAcc = 0;
         Net.sendState(this._serializeState());

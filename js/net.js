@@ -349,10 +349,14 @@ const Net = (() => {
     obj.q = ++sendSeq;
     if (conn && conn.open) { try { conn.send(obj); } catch (e) {} return; }
   }
-  // [v172] 状态包缓冲堆积保护: 可靠通道在对端慢/丢包时, SCTP 重传会让发送缓冲无限堆积,
-  //   延迟从链路基线(~220ms)滚雪球到 5000ms+(中继+手机流量丢包的实况)。
-  //   检测 DataChannel.bufferedAmount 超阈值(≈40 个状态包) → 丢弃本帧: 状态 30Hz 每帧覆盖,
-  //   丢 1-2 帧视觉无感(客户端有插值), 但队列不再无限堆积, 延迟打回基线。
+  // [v172→v177] 状态包限速: 根治中继延迟滚雪球(220ms→5000ms→1000ms)。
+  //   v172 的两个保护在移动端实测失效:
+  //   ① bufferedAmount 只统计"未进网络栈"的字节, 一旦数据进 SCTP 重传队列就归零
+  //      → 检测不到真正的在途堆积(这就是"仍然1000ms"的原因);
+  //   ② getChannelDetail 依赖 pc.getStats() 轮询, 部分浏览器(vivo)不返回/慢 → 恒 ''。
+  //   v177: 改用 RTT 驱动(ping/pong 实测, 走同一通道, 一定准) —— 高 RTT=中继/丢包特征
+  //   → 自动限 15Hz; 自我修正闭环: rtt 高→降频→队列清→rtt 回落→频率恢复。
+  let _lastStateTs = 0;
   function _stateBufferedHigh() {
     try {
       const dc = conn && (conn.dataChannel || conn._dc);
@@ -360,7 +364,14 @@ const Net = (() => {
     } catch (e) {}
     return false;
   }
-  function sendState(s) { if (_stateBufferedHigh()) return; send({ t: 'state', s }); }
+  function sendState(s) {
+    const now = Date.now();
+    const minGap = (rtt > 150) ? 66 : 33;   // 15Hz / 30Hz(v177: 高RTT自动降频)
+    if (now - _lastStateTs < minGap) return;
+    _lastStateTs = now;
+    if (_stateBufferedHigh()) return;        // 兜底(双重保险)
+    send({ t: 'state', s });
+  }
   function sendInput(c) { send({ t: 'input', c }); }
   function sendReset() { send({ t: 'reset' }); }
   function sendBye() { send({ t: 'bye' }); }
