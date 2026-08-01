@@ -12,10 +12,21 @@
 // 说明: 中继经公共 MQTT broker(EMQX/HiveMQ), 实测 RTT≈500ms, 对实时格斗几乎不可玩,
 //   故仅作"能连上但卡"的最后手段, 绝不静默接管。
 
-// v169 起: 纯 P2P 模式 —— 不再配置任何 TURN 服务器(无 relay 候选)。
-// 背景: TURN 中继(日本节点实测 ~220ms)对实时格斗几乎不可玩, 用户明确"宁可连不上也不要假兜底"。
-//   对称 NAT 时 ICE 无 relay 候选 → 连接失败(明确提示), 可穿透网络(锥形 NAT/同网)照常 P2P 直连。
-// 保留 STUN(收集 srflx 公网候选, 直连的关键), 删除 TURN = 物理上不可能再走 TURN 中继。
+// v170 起: 局外(TURN兜底可连房间) + 局内(仅P2P)。
+//   TURN 保留用于连接阶段兜底(对称 NAT 也能进房间看到对方);
+//   开战时由 main.js 检查 getChannelDetail(): relay → 拒绝开始对局(局内仅 P2P, 不卡着玩)。
+// 连接路径 ICE 一次性决定后恒定: 直连开局=整局直连; 中继连接=无法开战(明确提示)。
+const METERED_TURN_API = 'https://zmrly5555.metered.live/api/v1/turn/credentials?apiKey=4abe49e452ba47643a733c4b71c10063eac9&region=japan';
+const TURN_SERVERS_FALLBACK = [
+  // 静态兜底(REST API 不可达时): 日本优先(实测延迟最低) + 新加坡/global 兜底(凭据 5bd3b7... 均 Allocate 实测成功)
+  { urls: 'turn:jp.relay.metered.ca:80', username: '5bd3b785c789d8a13597e5bf', credential: 'VI7kyJaVnLrlIcLU' },
+  { urls: 'turn:jp.relay.metered.ca:80?transport=tcp', username: '5bd3b785c789d8a13597e5bf', credential: 'VI7kyJaVnLrlIcLU' },
+  { urls: 'turn:jp.relay.metered.ca:443', username: '5bd3b785c789d8a13597e5bf', credential: 'VI7kyJaVnLrlIcLU' },
+  { urls: 'turns:jp.relay.metered.ca:443?transport=tcp', username: '5bd3b785c789d8a13597e5bf', credential: 'VI7kyJaVnLrlIcLU' },
+  { urls: 'turn:sg.relay.metered.ca:80', username: '5bd3b785c789d8a13597e5bf', credential: 'VI7kyJaVnLrlIcLU' },
+  { urls: 'turn:sg.relay.metered.ca:443', username: '5bd3b785c789d8a13597e5bf', credential: 'VI7kyJaVnLrlIcLU' },
+  { urls: 'turn:global.relay.metered.ca:80', username: '5bd3b785c789d8a13597e5bf', credential: 'VI7kyJaVnLrlIcLU' }
+];
 const STUN_SERVERS = [
   { urls: 'stun:stun.relay.metered.ca:80' },
   { urls: 'stun:stun.l.google.com:19302' },
@@ -28,9 +39,32 @@ const STUN_SERVERS = [
   { urls: 'stun:stun.miwifi.com:3478' }
 ];
 
-// v169: 纯 P2P —— 仅 STUN(无 TURN), 不再有 relay 候选, 物理上不可能走 TURN 中继
+// 动态构建 ICE 配置: 优先用 Metered REST API 返回的实时 TURN(主机/凭据都由 Metered 给, 不靠猜), 失败回退静态
+// 返回 Promise<{iceServers, iceTransportPolicy}>, 始终 resolve(不会阻塞连接)
 function buildIceServers() {
-  return Promise.resolve({ iceServers: [...STUN_SERVERS], iceTransportPolicy: 'all' });
+  return new Promise((resolve) => {
+    let done = false;
+    const ok = (ice) => { if (done) return; done = true; resolve(ice); };
+    const fallback = () => ok({ iceServers: [...STUN_SERVERS, ...TURN_SERVERS_FALLBACK], iceTransportPolicy: 'all' });
+    try {
+      fetch(METERED_TURN_API, { cache: 'no-store' })
+        .then((r) => r.json())
+        .then((servers) => {
+          // Metered 在 key 无效/无权限时返回 {error:...} 而非数组 → 立即回退静态, 不卡死
+          if (!servers || servers.error || !Array.isArray(servers) || servers.length === 0) {
+            console.log('[TURN] 动态获取失败(无有效凭据), 用静态兜底');
+            fallback();
+            return;
+          }
+          const turn = servers.filter((s) => s && /turn:/.test(s.urls || ''));
+          console.log('[TURN] 服务已获取(' + turn.length + '条)');
+          ok({ iceServers: [...STUN_SERVERS, ...servers], iceTransportPolicy: 'all' });
+        })
+        .catch(() => { console.log('[TURN] 动态获取失败, 用静态兜底'); fallback(); });
+    } catch (e) { fallback(); }
+    // 兜底超时: 若 API 卡死(无网络), 5s 后用静态兜底, 不阻塞连接
+    setTimeout(() => { if (!done) { console.log('[TURN] 获取超时, 用静态兜底'); fallback(); } }, 5000);
+  });
 }
 
 const PEER_PREFIX = 'pma26-';
@@ -89,7 +123,7 @@ const Net = (() => {
     return new Promise((resolve, reject) => {
       role = 'host'; roomCode = genCode(); handshaked = false; mode = 'p2p';
 
-      progress('正在准备 P2P 直连...');
+      progress('正在获取 TURN 穿透服务...');
       buildIceServers().then((ice) => {
       let resolved = false;
       const finish = (code) => {
@@ -137,7 +171,7 @@ const Net = (() => {
     return new Promise((resolve, reject) => {
       role = 'client'; roomCode = code; handshaked = false; mode = 'p2p';
 
-      progress('正在准备 P2P 直连...');
+      progress('正在获取 TURN 穿透服务...');
       _joinResolve = (c) => { resolve(c); };
       _joinReject = (e) => { reject(e); };
       buildIceServers().then((ice) => {

@@ -179,6 +179,18 @@
     setRtt(aiPickRtt);
   }
 
+  // [v170] 局内仅 P2P: 开战前检查实际通道, TURN 中继(relay)时拒绝开始对战
+  // 连接路径 ICE 一次性决定后恒定: 直连开局=整局直连; 中继连接=无法开战(明确提示, 不卡着玩)
+  function guardRelayStart() {
+    if (Net.getChannelDetail() === 'relay') {
+      showOverlay('无法开始对战',
+        '当前连接为 TURN 中继（高延迟约 220ms），局内仅支持 P2P 直连。\n\n请与对手连接同一 WiFi，或等网络可直连时再试。',
+        '', { cancelable: true, cancelLabel: '知道了' });
+      return false;
+    }
+    return true;
+  }
+
   // ===== 登录界面逻辑 =====
   function showAuthScreen() {
     authScreen.classList.remove('hidden');
@@ -480,6 +492,7 @@
       showAIPickScreen();
       return;
     }
+    if (!guardRelayStart()) return; // v170: TURN中继(relay)拒绝开战, 局内仅P2P
     Net.sendStart(); // 通知 client 开始
     showGame();
     game.resetMatch();
@@ -829,12 +842,12 @@
     const hp2 = (AI_PRESETS[clientPickId] || AI_PRESETS.balanced).name;
     hudP1Name.textContent = '你的AI·' + hp1;
     hudP2Name.textContent = '对手AI·' + hp2;
+    if (!guardRelayStart()) return; // v170: TURN中继(relay)拒绝开战, 局内仅P2P
     Net.sendAiStart({ p1: hostPickId, p2: clientPickId });
     showGame();
     game.resetMatch();
     game.start();
   }
-
   async function startHost(modeArg) {
     setStatus('正在创建房间' + loadingDots());
     myRole = 'host'; // 同步置位: 必须早于任何 await, 否则连上瞬间的事件判不出角色
@@ -1042,6 +1055,10 @@
   // ===== 更新公告: 点击版本号显示近三次更新(倒序: 最新在前; 每条用短句概括改动, 一点一换行; 每次发版须 prepend 一条真实版本) =====
   // 文案规则: 每条不超过 30 字, 一条一个圆点, 折行不再出点(见 .cl-pt 悬挂缩进)
   const CHANGELOG = [
+    ['v170', [
+      '连接阶段恢复TURN兜底(对称NAT也能进房间看到对方)',
+      '局内仅P2P: 开战时若为TURN中继则拒绝开始并提示同网'
+    ]],
     ['v169', [
       '纯P2P模式: 彻底移除TURN中继(无relay候选, 物理上不可能走中继)',
       '对称NAT无法直连时明确连不上, 不再"卡着玩"; 可穿透网络照常直连'
