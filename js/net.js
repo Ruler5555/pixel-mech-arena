@@ -32,15 +32,18 @@ const TURN_SERVERS_FALLBACK = [
   { urls: 'turn:global.relay.metered.ca:80', username: '5bd3b785c789d8a13597e5bf', credential: 'VI7kyJaVnLrlIcLU' }
 ];
 const STUN_SERVERS = [
+  // [v173] 国内 STUN 优先: STUN 只问"公网映射地址", 海外 STUN 被墙时收集不到 srflx 会降低穿透成功率;
+  //   国内 STUN 可达性更稳 → 提到最前(并行请求, 失败自动跳过, 海外兜底)。
+  //   部署国内 coturn 后把下面这行加进来(它自带 STUN): { urls: 'stun:你的服务器IP:3478' }
+  { urls: 'stun:stun.qq.com:3478' },
+  { urls: 'stun:stun.miwifi.com:3478' },
   { urls: 'stun:stun.relay.metered.ca:80' },
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
   { urls: 'stun:stun2.l.google.com:19302' },
   { urls: 'stun:stun3.l.google.com:19302' },
   { urls: 'stun:stun4.l.google.com:19302' },
-  { urls: 'stun:global.stun.twilio.com:3478' },
-  { urls: 'stun:stun.qq.com:3478' },
-  { urls: 'stun:stun.miwifi.com:3478' }
+  { urls: 'stun:global.stun.twilio.com:3478' }
 ];
 
 // 动态构建 ICE 配置: 优先用 Metered REST API 返回的实时 TURN(主机/凭据都由 Metered 给, 不靠猜), 失败回退静态
