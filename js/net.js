@@ -19,9 +19,14 @@
 //   1. 凭据是账户级, 各区域都能用(global/sg/jp 均 Allocate 实测成功)
 //   2. API key 4abe49...(zmrly321456 凭据的 key, 已验证有效)
 //   3. TURN 端口: 80(udp/tcp) + 443(udp) + 443(tls); STUN: stun.relay.metered.ca:80
-// 动态拉取失败(网络/CORS)时回退到下方 TURN_SERVERS_FALLBACK(jp 优先 + sg/global 兜底, 均已验证可 Allocate)。
+// [v186] 自建国内 TURN 上线(北京 59.110.237.91, apt coturn 4.6.1, UDP 3478 Allocate 实测成功):
+//   国内玩家延迟预期 10-30ms(对比 jp Metered 220ms+, 跨网体验质变); 自建挂了自动回退下方 jp/sg/global。
+//   注: 免费期至 2026-09-01(阿里云轻量 1 个月免费), 到期后若未续费, 该 IP 失效, 自动回退 Metered。
+// 动态拉取失败(网络/CORS)时回退到下方 TURN_SERVERS_FALLBACK(自建国内 TURN 优先 + jp/sg/global 兜底)。
 const METERED_TURN_API = 'https://zmrly5555.metered.live/api/v1/turn/credentials?apiKey=4abe49e452ba47643a733c4b71c10063eac9&region=japan';
 const TURN_SERVERS_FALLBACK = [
+  // [v186] 自建国内 TURN(北京, UDP 3478) — 跨网中继延迟从 1000ms+ 砸到 10-30ms(对比 jp Metered 220ms+)
+  { urls: 'turn:59.110.237.91:3478?transport=udp', username: 'pma', credential: '94e0013bacd62748' },
   // ⚠️ v176: 移除 v175 帮手的"国内免费 TURN" 43.138.235.180:9002(zhaosonghan.com 博客配置)
   //   实测 UDP/TCP 9002 均无响应(死服务器, turn_verify.py 多次超时) —— ping 通 ≠ TURN 可用。
   //   教训: 第三方博客分享的公共 TURN 大概率已失效, 必须 TURN Allocate 实测通过才能接入。
@@ -36,6 +41,8 @@ const TURN_SERVERS_FALLBACK = [
   { urls: 'turns:jp.relay.metered.ca:443?transport=tcp', username: '5bd3b785c789d8a13597e5bf', credential: 'VI7kyJaVnLrlIcLU' }
 ];
 const STUN_SERVERS = [
+  // [v186] 自建 coturn 自带 STUN(国内 10-30ms) 提到最前, 提升国内网络 srflx 收集成功率
+  { urls: 'stun:59.110.237.91:3478' },
   // [v173] 国内 STUN 优先: STUN 只问"公网映射地址", 海外 STUN 被墙时收集不到 srflx 会降低穿透成功率;
   //   国内 STUN 可达性更稳 → 提到最前(并行请求, 失败自动跳过, 海外兜底)。
   //   部署国内 coturn 后把下面这行加进来(它自带 STUN): { urls: 'stun:你的服务器IP:3478' }
