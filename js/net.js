@@ -19,8 +19,9 @@
 //   ⚠️ 单点依赖: 服务器挂 或 2026-09-01 免费期到期未续费 → 联机瘫痪(用户已权衡确认)。
 //   备份: backup-v188-27fa4d8(回退: git checkout backup-v188-27fa4d8 -- js/net.js js/main.js index.html)
 const TURN_SERVERS = [
-  { urls: 'turn:59.110.237.91:3478?transport=udp', username: 'pma', credential: '94e0013bacd62748' },
-  { urls: 'turn:59.110.237.91:3478?transport=tcp', username: 'pma', credential: '94e0013bacd62748' }
+  // [v190] 仅 UDP 条目: 服务器 coturn 只监听 UDP(实测 TCP 3478 无响应), TCP 条目会让浏览器
+  //   在 relay 模式下尝试 TCP 分配失败/超时 → 拖慢甚至卡死 ICE 协商(客户端卡大厅/开战被拦)。
+  { urls: 'turn:59.110.237.91:3478?transport=udp', username: 'pma', credential: '94e0013bacd62748' }
 ];
 
 // [v189] 强制中继: 恒定返回自建北京 TURN + relay 策略(无需动态拉取/回退/超时, 同步返回 Promise)
