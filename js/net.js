@@ -155,7 +155,25 @@ const Net = (() => {
       try { peer = new Peer(PEER_PREFIX + roomCode, { debug: 1, config: ice }); }
       catch (e) { reject(e); return; }
 
+      // v182: 信令超时兜底 —— 信令服务器(0.peerjs.com)偶发慢/失败时 peer.on('open') 永不触发,
+      //   建房会永久卡住(概率性"点击 AI 对战卡死"根因)。15s 未 open → reconnect 重试提示;
+      //   30s 仍失败 → reject 让上层提示重试(建房永不永久卡)。
+      const signalRetryTimer = setTimeout(() => {
+        if (peer && !peer.destroyed && !peer.open && !resolved) {
+          progress('信令连接慢, 正在重试...');
+          try { peer.reconnect(); } catch (e) {}
+        }
+      }, 15000);
+      const signalFailTimer = setTimeout(() => {
+        if (resolved) return;
+        try { clearTimeout(signalRetryTimer); } catch (e) {}
+        try { if (peer && !peer.destroyed) peer.destroy(); } catch (e) {}
+        peer = null;
+        reject(new Error('信令连接超时, 请重试'));
+      }, 30000);
+
       peer.on('open', () => {
+        clearTimeout(signalRetryTimer); clearTimeout(signalFailTimer);
         progress('信令已就绪, 等待对手(P2P 直连优先)...');
         finish(roomCode);
         // v181: 20s 未握手 → 启动 MQTT 兜底(仅保进房, 不承载对局数据)
@@ -178,6 +196,7 @@ const Net = (() => {
       peer.on('error', (err) => {
         if (err.type === 'unavailable-id') {
           progress('房号冲突, 换号重试...');
+          clearTimeout(signalRetryTimer); clearTimeout(signalFailTimer);
           try { peer.destroy(); } catch (e) {}
           roomCode = genCode();
           setTimeout(() => _p2pHost().then(resolve, reject), 200);
@@ -202,7 +221,17 @@ const Net = (() => {
         try { peer = new Peer({ debug: 1, config: ice }); }
         catch (e) { reject(e); return; }
 
+        // v182: 信令超时兜底(client 侧, 与 host 对称) —— 信令偶发慢时 joinRoom 不永久卡
+        const signalFailTimer = setTimeout(() => {
+          if (peer && !peer.open && _joinReject) {
+            try { if (peer && !peer.destroyed) peer.destroy(); } catch (e) {}
+            peer = null;
+            _joinReject(new Error('信令连接超时, 请重试'));
+          }
+        }, 30000);
+
         peer.on('open', () => {
+          clearTimeout(signalFailTimer);
           progress('信令已就绪, 正在尝试 P2P 直连...');
           _tryP2pConnect();
           // v181: 20s 未握手 → 启动 MQTT 兜底(仅保进房, 不承载对局数据)
