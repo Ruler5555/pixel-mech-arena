@@ -152,6 +152,14 @@
 
   // [v136] 模式/延迟标签: 对局顶栏(#topCluster)与 AI 选风格屏顶栏(aiPickRtt/aiPickModeTag)共用同一套显示逻辑
   // [v164] 真实通道: getChannelDetail() 识别 ICE 实际候选类型(直连/TURN中继), 避免"P2P标签骗人"
+  // [v184] 统一连接模式文案: 基于真实通道(不误用预期模式 getMode)
+  //   getStateChannel 区分 MQTT 中继兜底; getChannelDetail 区分 WebRTC 内的 TURN 中继/真直连
+  function channelLabel() {
+    if (Net.getStateChannel() === 'relay') return '中继';
+    if (Net.getChannelDetail() === 'relay') return 'TURN中继';
+    if (Net.getChannelDetail() === 'direct') return 'P2P直连';
+    return 'P2P';
+  }
   function updateNetTags() {
     const setMode = (el) => {
       if (!el) return;
@@ -457,7 +465,7 @@
   btnShareWorld.addEventListener('click', () => {
     if (shareCooldown) return; // 冷却期内直接忽略
     const code = roomLobbyCode.textContent;
-    World.shareRoom(code, currentPlayer ? currentPlayer.name : '玩家', currentPlayer ? currentPlayer.id : '', Net.getMode() === 'relay' ? '中继' : 'P2P');
+    World.shareRoom(code, currentPlayer ? currentPlayer.name : '玩家', currentPlayer ? currentPlayer.id : '', channelLabel());
     sharedToWorld = true; // 退出房间时据此 stopShare
     btnShareWorld.classList.add('shared');
     // 点击反馈统一显示"已分享", 恢复后的空闲文案按是否已分享过区分: 首次=分享到世界, 之后=再次分享到世界
@@ -883,7 +891,7 @@
       roleP2.textContent = roomMode === 'ai' ? '对手AI' : '对手';
       hudP1Name.textContent = currentPlayer ? currentPlayer.name : 'BLUE-01';
       showRoomLobby(code);
-      const mode = Net.getMode() === 'relay' ? '中继' : 'P2P';
+      const mode = channelLabel(); // v184: 真实通道文案, 不再误用 getMode(预期值)
       setStatus('房号: ' + code + ' (' + mode + ')<br>等待对手加入' + loadingDots());
     } catch (e) {
       setStatus('创建失败: ' + (e.message || e), true);
@@ -928,7 +936,7 @@
       game.resetMatch();
       game.state = 'fight'; // 等待期间静态渲染, 不显示 READY?/倒计时
       game.draw();
-      const mode = Net.getMode() === 'relay' ? '中继' : 'P2P';
+      const mode = channelLabel(); // v184: 真实通道文案(显示 P2P直连/TURN中继/中继)
       setStatus('已加入房间 ' + code + ' (' + mode + ')');
       showOverlay('已连接', '模式: ' + mode + '\n等待主机开始...', '');
     } catch (e) {
@@ -1083,6 +1091,10 @@
   // ===== 更新公告: 点击版本号显示近三次更新(倒序: 最新在前; 每条用短句概括改动, 一点一换行; 每次发版须 prepend 一条真实版本) =====
   // 文案规则: 每条不超过 30 字, 一条一个圆点, 折行不再出点(见 .cl-pt 悬挂缩进)
   const CHANGELOG = [
+    ['v184', [
+      '修正等待大厅连接模式显示: 用真实通道(直连/TURN中继/中继)替代预期值',
+      '不再误报"P2P"(实际可能 TURN 中继), 屏幕中心与右上角一致诚实'
+    ]],
     ['v183', [
       '修复选风格确认不同步: 确认消息无限重发直到收到回执',
       '修正"房主已收到"误报文案(实际未送达时显示等待); 选风格屏UI每秒自愈刷新'
