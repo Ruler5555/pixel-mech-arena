@@ -714,6 +714,18 @@
   const exitMobileBtn = document.getElementById('exitMobileBtn');
   if (exitMobileBtn) exitMobileBtn.addEventListener('click', onExit);
 
+  // [v198] 桌面端 ESC 退出 —— 之前从未绑定(实机检查发现: 桌面宽屏下退出按钮被 media query 隐藏,
+  //   而 MEMORY.md 声称的"桌面退出走 ESC"实际无实现 = 桌面端对局内无退出途径)。
+  //   仅对局界面(gameWrap 可见)生效, 不依赖 game.running 内部字段(更稳);
+  //   输入框聚焦/已弹确认框时不重复触发; 复用 onExit 现有确认流程。
+  window.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+    if (exitConfirmMode) return; // 确认框已弹出, ESC 不重复弹(防误触)
+    const gw = document.getElementById('gameWrap');
+    if (gw && !gw.classList.contains('hidden')) onExit(e); // 必须传 e: onExit 内 e.preventDefault()
+  });
+
   // ===== 大厅按钮 =====
   // 单人模式入口 → 改为进入「选择玩法」屏, 由屏内按钮再决定具体模式
   btnOffline.addEventListener('click', () => {
@@ -1092,6 +1104,9 @@
   // ===== 更新公告: 点击版本号显示近三次更新(倒序: 最新在前; 每条用短句概括改动, 一点一换行; 每次发版须 prepend 一条真实版本) =====
   // 文案规则: 每条不超过 30 字, 一条一个圆点, 折行不再出点(见 .cl-pt 悬挂缩进)
   const CHANGELOG = [
+    ['v198', [
+      '桌面端按 ESC 可退出对局(之前桌面无退出途径)'
+    ]],
     ['v197', [
       '自适应抖动缓冲:跨网中继偶尔卡顿根治',
       '同网低延迟不变,中继抖动大自动加深缓冲'
