@@ -105,6 +105,11 @@ const Net = (() => {
   let playerName = '';
   let _channelDetail = '';    // v164: 真实 ICE 通道 ''未知 / 'direct'直连 / 'relay'TURN中继
   let _channelTimer = null;   // v164: 轮询 selected candidate pair 的定时器
+  // [v181] MQTT 仅保进房: P2P 20s 未握手才启动 MQTT 兜底(只承载握手+低频控制消息,
+  //   对局数据 state/input 永不走 MQTT)。P2P/TURN 连上即正常对局(对齐 v110 的"保联机房"设计)。
+  let mqttClient = null;      // MQTT 兜底客户端(EMQX/HiveMQ 公共 broker)
+  let relayTopic = null;      // MQTT 房间 topic: pma26/<code>
+  let relayDeadline = null;   // 20s 未握手 → 启动 MQTT 兜底的定时器
 
   const handlers = {
     open: [], connected: [], state: [], input: [], close: [],
@@ -121,9 +126,11 @@ const Net = (() => {
 
   // ============ 握手出口(连接那一刻锁定通道) ============
   function _emitConnected(payload, ch) {
+    if (handshaked) return; // v181: 幂等 —— P2P/MQTT 双通道 hello 只会触发一次 connected
     handshaked = true;
     if (ch) mode = ch;                 // 锁定 / 更新传输通道(一次性决策)
     clearTimeout(p2pRetryTimer); p2pRetryTimer = null;
+    clearTimeout(relayDeadline); relayDeadline = null; // v181: 握手完成, MQTT 兜底不再需要
     joining = false;
     _startPingMonitor();
     if (role === 'client' && _joinResolve) {
@@ -151,6 +158,8 @@ const Net = (() => {
       peer.on('open', () => {
         progress('信令已就绪, 等待对手(P2P 直连优先)...');
         finish(roomCode);
+        // v181: 20s 未握手 → 启动 MQTT 兜底(仅保进房, 不承载对局数据)
+        relayDeadline = setTimeout(() => { if (!handshaked) _startRelayListen(roomCode); }, 20000);
       });
 
       peer.on('connection', (c) => {
@@ -196,6 +205,8 @@ const Net = (() => {
         peer.on('open', () => {
           progress('信令已就绪, 正在尝试 P2P 直连...');
           _tryP2pConnect();
+          // v181: 20s 未握手 → 启动 MQTT 兜底(仅保进房, 不承载对局数据)
+          relayDeadline = setTimeout(() => { if (!handshaked) _startRelayListen(code); }, 20000);
         });
 
         peer.on('disconnected', () => { progress('信令断开, 重连中...'); try { peer.reconnect(); } catch (e) {} });
@@ -230,6 +241,71 @@ const Net = (() => {
   // 用户取消连接(返回大厅): 解阻塞 joinRoom
   function abortJoin() {
     if (_joinReject) { const r = _joinReject; _joinReject = null; _joinResolve = null; r(new Error('已取消')); }
+  }
+
+  // ============ [v181] MQTT 仅保进房兜底 ============
+  // 用 EMQX 公共 broker(broker.emqx.io, 国内可达), 每个房间 topic: pma26/<code>
+  // 职责边界: 只在 P2P 20s 未握手时启动, 仅承载 hello/world 握手 + 低频控制消息;
+  //   state/input(对局数据)在 message 回调里直接丢弃 —— 对局通道永远只有 P2P/TURN。
+  const MQTT_BROKERS = [
+    'wss://broker.emqx.io:8084/mqtt',
+    'wss://broker.hivemq.com:8884/mqtt'
+  ];
+  function _startRelayListen(code) { _relayConnect(code); }
+  function _relayConnect(code) {
+    if (typeof mqtt === 'undefined') return; // MQTT 库未加载(理论上 world.js 已加载)
+    if (mqttClient && mqttClient.connected) return;
+    relayTopic = 'pma26/' + code;
+    const tryBroker = (idx) => {
+      if (idx >= MQTT_BROKERS.length) return;
+      try { if (mqttClient) mqttClient.end(true); } catch (e) {}
+      mqttClient = null;
+      const tag = idx === 0 ? 'EMQX' : 'HiveMQ';
+      try {
+        const clientId = 'pma26-' + role + '-' + Date.now() + '-' + Math.random().toString(16).slice(2, 6);
+        mqttClient = mqtt.connect(MQTT_BROKERS[idx], {
+          clientId, clean: true, keepalive: 30,
+          reconnectPeriod: 2000, connectTimeout: 10000
+        });
+      } catch (e) { tryBroker(idx + 1); return; }
+      let helloRetryTimer = null;
+      mqttClient.on('connect', () => {
+        progress('中继兜底已连接(' + tag + '), 正在走通进房流程...');
+        try { mqttClient.subscribe(relayTopic, { qos: 0 }); } catch (e) {}
+        // client 且尚未握手: 通过 MQTT 发 hello 兜底握手(重试直到握手完成)
+        if (role === 'client' && !handshaked) {
+          const sendHello = () => {
+            if (handshaked) return;
+            _relaySend({ t: 'hello', n: playerName });
+            helloRetryTimer = setTimeout(sendHello, 1500);
+          };
+          setTimeout(sendHello, 300);
+        }
+      });
+      mqttClient.on('message', (topic, payload) => {
+        try {
+          const msg = JSON.parse(payload.toString());
+          if (!msg || !msg.t) return;
+          if (msg.r === role) return; // 忽略自己发的
+          if (msg.t === 'state' || msg.t === 'input') return; // 对局数据仅 P2P/TURN, MQTT 丢弃
+          if (msg.t === 'hello') { _handleHello(msg, 'relay'); return; }
+          if (msg.t === 'world') { _handleWorld(msg, 'relay'); return; }
+          if (!_acceptSeq(msg)) return;
+          _routeMsg(msg, 'relay');
+        } catch (e) {}
+      });
+      mqttClient.on('error', () => {});
+      mqttClient.on('offline', () => {});
+      mqttClient.on('close', () => {});
+    };
+    tryBroker(0);
+  }
+  function _relaySend(obj) {
+    try {
+      if (!mqttClient || !mqttClient.connected) return;
+      const m = Object.assign({}, obj, { r: role });
+      mqttClient.publish(relayTopic, JSON.stringify(m), { qos: 0 });
+    } catch (e) {}
   }
 
   // ============ 保活 / 测速 ============
@@ -347,12 +423,15 @@ const Net = (() => {
   function getChannelDetail() { return _channelDetail; }
 
   // ============ 通用接口 ============
-  // 单通道发送(v167: 已删 MQTT 中继, 仅 P2P 通道):
-  //   P2P 通道(conn)可用就发 P2P(低延迟); P2P 断开时宁可丢帧等重连,
-  //   绝不走任何中继(500ms+ 延迟尖刺的根源已彻底移除)
+  // [v181] 单通道数据 + 控制消息双通道:
+  //   - state/input(高频对局数据): 仅 P2P/TURN 通道(conn), 断开宁丢帧 —— 保持 v167 成果
+  //   - 低频控制消息(start/reset/rmt/bye/aimode/aipick/aipickack/aistart/aips/aicxl):
+  //     双通道冗余(P2P + MQTT 兜底), 保证选风格确认/开战等关键流程可靠送达(v174 确认机制的上层保险)
+  const CTRL_TYPES = ['start','reset','rmt','bye','aimode','aipick','aipickack','aistart','aips','aicxl'];
   function send(obj) {
     obj.q = ++sendSeq;
-    if (conn && conn.open) { try { conn.send(obj); } catch (e) {} return; }
+    if (conn && conn.open) { try { conn.send(obj); } catch (e) {} }
+    if (CTRL_TYPES.indexOf(obj.t) !== -1 && mqttClient && mqttClient.connected) { _relaySend(obj); }
   }
   // [v172→v177] 状态包限速: 根治中继延迟滚雪球(220ms→5000ms→1000ms)。
   //   v172 的两个保护在移动端实测失效:
@@ -391,10 +470,16 @@ const Net = (() => {
   function sendAiCancel() { send({ t: 'aicxl' }); }
 
   function getRole() { return role; }
-  function isConnected() { return !!(conn && conn.open); }
+  function isConnected() { return !!(conn && conn.open) || !!(mqttClient && mqttClient.connected && handshaked); }
+  function isP2PReady() { return !!(conn && conn.open); } // v181: 对局数据通道(P2P/TURN)是否就绪
   function getRoomCode() { return roomCode; }
   function getMode() { return mode; }
-  function getStateChannel() { return mode; } // 当前实际承载通道(单值, 不再有"谁先到谁赢"竞态)
+  function getStateChannel() {
+    // v181: 以真实数据通道为准 —— P2P/TURN 通道(conn)优先, 仅 MQTT 兜底握手时显示'relay'
+    if (conn && conn.open) return 'p2p';
+    if (mqttClient && mqttClient.connected && handshaked) return 'relay';
+    return mode;
+  }
   function getRtt() { return rtt; }
 
   function _cleanupP2P() {
@@ -412,12 +497,16 @@ const Net = (() => {
     clearTimeout(p2pRetryTimer); p2pRetryTimer = null;
     _stopPingMonitor();
     clearInterval(_channelTimer); _channelTimer = null; _channelDetail = '';
+    // v181: 清理 MQTT 兜底
+    try { if (mqttClient) { mqttClient.end(true); } } catch (e) {}
+    mqttClient = null; relayTopic = null;
+    clearTimeout(relayDeadline); relayDeadline = null;
   }
 
   return {
     on, hostRoom, joinRoom, abortJoin,
     sendState, sendInput, sendReset, sendBye, sendStart, sendRematchReady,
     sendAiMode, sendAiPick, sendAiPickAck, sendAiStart, sendAiPickStart, sendAiCancel,
-    setName, getRole, isConnected, getRoomCode, getMode, getRtt, getStateChannel, getChannelDetail, close
+    setName, getRole, isConnected, isP2PReady, getRoomCode, getMode, getRtt, getStateChannel, getChannelDetail, close
   };
 })();

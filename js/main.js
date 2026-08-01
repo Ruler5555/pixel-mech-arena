@@ -484,6 +484,11 @@
       showAIPickScreen();
       return;
     }
+    // v181: 对局数据仅走 P2P/TURN 通道 —— 直连通道未建立时禁止开战(避免进对局后无数据通道)
+    if (!Net.isP2PReady()) {
+      showOverlay('正在建立对局通道', '对手已进房, P2P 直连通道建立中...\n\n请稍候几秒再点「开始对战」\n(对局数据仅走直连通道, 不会走中继)', '', { cancelable: true, cancelLabel: '返回大厅' });
+      return;
+    }
     Net.sendStart(); // 通知 client 开始
     showGame();
     game.resetMatch();
@@ -838,6 +843,11 @@
     }
   }
   function startAIMatch() {
+    // v181: 对局数据仅走 P2P/TURN 通道 —— 直连通道未建立时禁止开战
+    if (!Net.isP2PReady()) {
+      showOverlay('正在建立对局通道', '对手已进房, P2P 直连通道建立中...\n\n请稍候几秒再点「开始对战」\n(对局数据仅走直连通道, 不会走中继)', '', { cancelable: true, cancelLabel: '返回大厅' });
+      return;
+    }
     game.setMode('aiHost');
     document.body.classList.add('ai-spectate'); // AI 观战: 隐藏触控操作键
     game.setAIPresets(hostPickId, clientPickId);
@@ -1069,6 +1079,10 @@
   // ===== 更新公告: 点击版本号显示近三次更新(倒序: 最新在前; 每条用短句概括改动, 一点一换行; 每次发版须 prepend 一条真实版本) =====
   // 文案规则: 每条不超过 30 字, 一条一个圆点, 折行不再出点(见 .cl-pt 悬挂缩进)
   const CHANGELOG = [
+    ['v181', [
+      '恢复MQTT保进房兜底: P2P 20s未握手自动走通进房流程',
+      '对局数据仍仅走直连(TURN), 中继不承载对局; 开战前校验直连通道'
+    ]],
     ['v180', [
       '回退v179自动重抽直连(实测引入「重连中」卡死回归)',
       '恢复v178稳定连接: 能进房间(中继可连), 穿透成功仍直连'
