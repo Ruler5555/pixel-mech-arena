@@ -40,6 +40,11 @@ const TURN_SERVERS_FALLBACK = [
   { urls: 'turn:jp.relay.metered.ca:80?transport=tcp', username: '5bd3b785c789d8a13597e5bf', credential: 'VI7kyJaVnLrlIcLU' },
   { urls: 'turns:jp.relay.metered.ca:443?transport=tcp', username: '5bd3b785c789d8a13597e5bf', credential: 'VI7kyJaVnLrlIcLU' }
 ];
+// [v187] 自建国内 TURN 单独成组, 插入「动态拉取成功」结果的最前。
+//   此前 API 拉取成功时只返回 Metered jp(海外 1000ms+), 自建服务器白部署 —— 现强制自建优先。
+const TURN_SELF_HOSTED = [
+  { urls: 'turn:59.110.237.91:3478?transport=udp', username: 'pma', credential: '94e0013bacd62748' }
+];
 const STUN_SERVERS = [
   // [v186] 自建 coturn 自带 STUN(国内 10-30ms) 提到最前, 提升国内网络 srflx 收集成功率
   { urls: 'stun:59.110.237.91:3478' },
@@ -76,7 +81,7 @@ function buildIceServers() {
           }
           const turn = servers.filter((s) => s && /turn:/.test(s.urls || ''));
           console.log('[TURN] 服务已获取(' + turn.length + '条)');
-          ok({ iceServers: [...STUN_SERVERS, ...servers], iceTransportPolicy: 'all' });
+          ok({ iceServers: [...STUN_SERVERS, ...TURN_SELF_HOSTED, ...servers], iceTransportPolicy: 'all' });
         })
         .catch(() => { console.log('[TURN] 动态获取失败, 用静态兜底'); fallback(); });
     } catch (e) { fallback(); }
