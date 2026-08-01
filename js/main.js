@@ -383,7 +383,7 @@
       return '<div class="world-item" data-code="' + r.roomCode + '">' +
         '<div class="world-item-top">' +
           '<span class="world-item-code">' + r.roomCode + '</span>' +
-          '<span class="world-item-mode">' + (r.mode || 'P2P') + '</span>' +
+          '<span class="world-item-mode">' + ((r.mode && r.mode.indexOf('未知') === -1) ? r.mode : '联机') + '</span>' +
         '</div>' +
         '<div class="world-item-name">' + (r.playerName || '玩家') + '</div>' +
         '<div class="world-item-time">' + timeStr + '</div>' +
@@ -1092,6 +1092,10 @@
   // ===== 更新公告: 点击版本号显示近三次更新(倒序: 最新在前; 每条用短句概括改动, 一点一换行; 每次发版须 prepend 一条真实版本) =====
   // 文案规则: 每条不超过 30 字, 一条一个圆点, 折行不再出点(见 .cl-pt 悬挂缩进)
   const CHANGELOG = [
+    ['v194', [
+      '中继降频加15Hz档(RTT>35即降频,不依赖getStats)',
+      '世界频道房间状态不再显示P2P(未知)'
+    ]],
     ['v193', [
       '状态通道改不可靠:丢帧不重传,延迟不再滚雪球上千',
       '坏网体验从卡顿变偶发瞬移,控制消息双通道兜底'
