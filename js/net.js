@@ -92,6 +92,13 @@ const Net = (() => {
   let joining = false;     // 连接阶段标志
   let _joinResolve = null; // client joinRoom 的 resolver
   let _joinReject = null;  // client joinRoom 的 rejector(用户取消时调用)
+  // [v179] 中继自动重抽直连: 连接建立后若 ICE 选到 relay(TURN 中继), 说明当次 NAT 穿透失败。
+  //  运营商 CGNAT 映射是动态的 —— 等待期销毁重建连接重新协商(重新抽签), 有机会拿到可穿透映射。
+  let rejoinPending = false;    // host 侧: client 正在重连(忽略断线弹窗, 允许新连接替换)
+  let suppressDisconnect = false; // client 侧: 重建期间不弹「连接断开」
+  let rebuilding = false;       // 重建进行中(防重入)
+  let autoRetryDirect = 0;      // 本局自动重抽次数(封顶 2 次)
+  let _connOpenedAt = 0;        // 连接建立时刻(20s 窗口内才自动重抽, 开战后不打扰)
   let p2pRetryTimer = null;
   let p2pConnectAttempts = 0;
   const P2P_RETRY_GAP = 8000;   // 首轮重试间隔(快场景快速抽签)
@@ -156,7 +163,8 @@ const Net = (() => {
       peer.on('connection', (c) => {
         // v162: 收到新连接时, 若旧连接未完成协商则先清理(避免并发 ICE 协商混乱, 恢复 v109 单连接穿透)
         if (conn && conn !== c) {
-          if (conn.open) { c.close(); return; } // 已有可用直连, 丢弃新的
+          // v179: client 自动重抽直连(rejoinPending)时允许新连接替换旧连接(重新协商=重新抽签)
+          if (conn.open && !rejoinPending) { c.close(); return; } // 已有可用直连, 丢弃新的
           try { conn.close(); } catch (e) {}
         }
         conn = c; mode = 'p2p';
@@ -285,11 +293,17 @@ const Net = (() => {
     else if (msg.t === 'aicxl') emit('aicancel');
     else if (msg.t === 'ping') send({ t: 'pong', ts: msg.ts });
     else if (msg.t === 'pong') { const r = Date.now() - (msg.ts || 0); if (r >= 0 && r < 10000) rtt = r; }
+    else if (msg.t === 'rejoin') { // v179: client 正在自动重抽直连, 25s 窗口内忽略断线/接受新连接替换
+      rejoinPending = true;
+      setTimeout(() => { rejoinPending = false; }, 25000);
+    }
   }
 
   function bindConn(c) {
     _watchSelectedPair(c);  // v164: 检测真实 ICE 通道(直连/TURN中继)
     c.on('open', () => {
+      suppressDisconnect = false; // v179: 新连接建立, 恢复断线提示能力
+      _connOpenedAt = Date.now(); // v179: 记录连接建立时刻(自动重抽直连的窗口起点)
       progress('P2P 已建立');
       _startPingMonitor();
       try { c.send({ t: 'hello', n: playerName, q: ++sendSeq }); } catch (e) {}
@@ -307,9 +321,10 @@ const Net = (() => {
     });
     c.on('close', () => {
       // 通道断开: 不再静默翻 mode, 通知上层让用户决策(弹「连接断开」)
-      if (handshaked) emit('disconnected');
+      // v179: client 重建连接期间(rejoinPending/suppressDisconnect)不弹, 避免干扰自动重抽
+      if (handshaked && !suppressDisconnect && !rejoinPending) emit('disconnected');
     });
-    c.on('error', () => { if (handshaked) emit('disconnected'); });
+    c.on('error', () => { if (handshaked && !suppressDisconnect && !rejoinPending) emit('disconnected'); });
   }
 
   // ============ v164: 真实 ICE 通道检测 ============
@@ -337,6 +352,8 @@ const Net = (() => {
             const rt = remote ? (remote.candidateType || '') : '';
             // 任一侧 relay = 数据经 TURN 中继; 两侧均非 relay = 真直连
             _channelDetail = (lt === 'relay' || rt === 'relay') ? 'relay' : 'direct';
+            // v179: 检测到中继且是 client 等待期 → 自动重抽直连(销毁重建重新协商)
+            if (_channelDetail === 'relay') _maybeAutoRetryDirect();
           }
         } catch (e) {}
       };
@@ -345,6 +362,44 @@ const Net = (() => {
     } catch (e) {}
   }
   function getChannelDetail() { return _channelDetail; }
+
+  // [v179] 中继自动重抽直连(client 等待期, 每局最多 2 次)
+  // 连接建立后若 ICE 选到 relay(TURN 中继), 说明当次 NAT 穿透失败。
+  // 运营商 CGNAT 映射是动态的 —— 销毁重建连接重新协商(重新抽签), 有机会拿到可穿透映射直连。
+  // 守卫: 仅 client / 已握手 / 连接建立后 20s 内(等待大厅阶段, 开战后不打扰) / 不重入 / 封顶 2 次。
+  function _maybeAutoRetryDirect() {
+    if (role !== 'client' || rebuilding || autoRetryDirect >= 2) return;
+    if (!handshaked) return;
+    if (!_connOpenedAt || Date.now() - _connOpenedAt > 20000) return;
+    autoRetryDirect++;
+    rebuilding = true;
+    suppressDisconnect = true;
+    progress('检测到 TURN 中继, 自动重试直连(' + autoRetryDirect + '/2)...');
+    // 通知 host: 正在重连, 期间忽略断线提示并接受新连接替换
+    try { if (conn && conn.open) conn.send({ t: 'rejoin' }); } catch (e) {}
+    setTimeout(() => {
+      if (!peer || peer.destroyed) { rebuilding = false; suppressDisconnect = false; return; }
+      try { peer.destroy(); } catch (e) {}
+      conn = null;
+      p2pConnectAttempts = 0; // 重建后重新快轮抽签(前 2 轮 8s)
+      buildIceServers().then((ice) => {
+        try { peer = new Peer({ debug: 1, config: ice }); }
+        catch (e) { rebuilding = false; suppressDisconnect = false; return; }
+        peer.on('open', () => {
+          progress('重连信令就绪, 尝试直连...');
+          rebuilding = false;
+          _tryP2pConnect();
+        });
+        peer.on('disconnected', () => { try { peer.reconnect(); } catch (e) {} });
+        peer.on('error', (err) => {
+          if (err.type === 'peer-unavailable') { progress('主机暂时不可达, 重试 P2P...'); return; }
+          progress('信令错误: ' + err.type);
+        });
+      });
+      // 重建若迟迟未成功(如信令断), 30s 后恢复断线提示能力
+      setTimeout(() => { if (rebuilding) { rebuilding = false; suppressDisconnect = false; } }, 30000);
+    }, 2500);
+  }
 
   // ============ 通用接口 ============
   // 单通道发送(v167: 已删 MQTT 中继, 仅 P2P 通道):
@@ -412,6 +467,9 @@ const Net = (() => {
     clearTimeout(p2pRetryTimer); p2pRetryTimer = null;
     _stopPingMonitor();
     clearInterval(_channelTimer); _channelTimer = null; _channelDetail = '';
+    // v179 复位
+    rejoinPending = false; suppressDisconnect = false; rebuilding = false;
+    autoRetryDirect = 0; _connOpenedAt = 0;
   }
 
   return {
