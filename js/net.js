@@ -12,10 +12,14 @@
 // 说明: 中继经公共 MQTT broker(EMQX/HiveMQ), 实测 RTT≈500ms, 对实时格斗几乎不可玩,
 //   故仅作"能连上但卡"的最后手段, 绝不静默接管。
 
-// v170 起: 局外(TURN兜底可连房间) + 局内(仅P2P)。
-//   TURN 保留用于连接阶段兜底(对称 NAT 也能进房间看到对方);
-//   开战时由 main.js 检查 getChannelDetail(): relay → 拒绝开始对局(局内仅 P2P, 不卡着玩)。
-// 连接路径 ICE 一次性决定后恒定: 直连开局=整局直连; 中继连接=无法开战(明确提示)。
+// ⚠️ 跨网能玩的关键: 必须有一个「活的」TURN 服务器做 NAT 穿透。
+// v160 起: region=japan 日本节点(实测对国内 TCP 延迟最低 ~220ms, 优于 sg ~300-400 / global ~280-395)
+//   v158 曾用 region=global(就近路由), 但实测 global 对国内路由不佳(158.247.200.82), 用户测出 1500+ms。
+// v155 关键修正(REST API 实测确认):
+//   1. 凭据是账户级, 各区域都能用(global/sg/jp 均 Allocate 实测成功)
+//   2. API key 4abe49...(zmrly321456 凭据的 key, 已验证有效)
+//   3. TURN 端口: 80(udp/tcp) + 443(udp) + 443(tls); STUN: stun.relay.metered.ca:80
+// 动态拉取失败(网络/CORS)时回退到下方 TURN_SERVERS_FALLBACK(jp 优先 + sg/global 兜底, 均已验证可 Allocate)。
 const METERED_TURN_API = 'https://zmrly5555.metered.live/api/v1/turn/credentials?apiKey=4abe49e452ba47643a733c4b71c10063eac9&region=japan';
 const TURN_SERVERS_FALLBACK = [
   // 静态兜底(REST API 不可达时): 日本优先(实测延迟最低) + 新加坡/global 兜底(凭据 5bd3b7... 均 Allocate 实测成功)
