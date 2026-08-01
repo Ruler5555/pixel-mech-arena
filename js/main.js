@@ -264,8 +264,10 @@
     aiLocalPickId = null;
     aiConfirmed = false;
     // [v136] 选风格屏顶栏(延迟/模式)实时刷新, 离开时清理定时器
+    // [v183] 同时每 1s 强制 updateAIPickStatus —— UI 状态自愈: 偶发的确认/选风格显示
+    //   不同步会在 1s 内自动纠正(不触碰联机传输层, 仅流程层自愈)
     clearInterval(aiPickUiTimer);
-    aiPickUiTimer = setInterval(updateNetTags, 1000);
+    aiPickUiTimer = setInterval(() => { updateNetTags(); updateAIPickStatus(); }, 1000);
     updateNetTags();
     updateAIPickStatus(); // 文案与可点状态统一由此函数决定, 不再在这里写死
   }
@@ -783,10 +785,11 @@
     sendPick();
     aiPickAckCount = 0;
     clearTimeout(aiPickAckTimer);
+    // v183: 去掉 5 次重发上限 → 每 2s 无限重发直到收到 ack(ack handler 清定时器)/断线/离开房间。
+    //   根治偶发"host 收不到确认"导致的选风格卡死(确认消息必须送达, 符合"不骗人"原则)
     aiPickAckTimer = setTimeout(function tick() {
-      if (aiPickAckCount >= 5) { aiPickAckTimer = null; return; } // 5 次仍无回执, 放弃(等用户手动重发)
-      aiPickAckCount++;
-      if (Net.isConnected()) sendPick();
+      if (!Net.isConnected()) { aiPickAckTimer = null; return; } // 断线停止, 避免空转
+      sendPick();
       aiPickAckTimer = setTimeout(tick, 2000);
     }, 2000);
     aiConfirmed = true;
@@ -835,10 +838,11 @@
       btnAIStart.classList.toggle('waiting', !(hostPickId && clientPickId));
     } else {
       aiPickStatus.textContent = '你的AI: ' + myName +
-        (aiPickAckTimer && aiPickAckCount > 0 ? ' ｜ 已发送, 等待房主确认...' :
+        (aiPickAckTimer ? ' ｜ 已发送, 等待房主确认...' :
           (aiConfirmed ? ' ｜ 房主已收到 ✓ 等待开打' :
             (aiLocalPickId ? ' ｜ 点下方确认' : ' ｜ 请选择一个风格')));
-      btnAIStart.textContent = (aiConfirmed && !aiPickAckTimer) ? '已确认 ✓ 点击可重发' : '确认风格';
+      // v183: 按钮三态 —— 未确认'确认风格' / 已发等待回执'确认中...' / 收到回执'已确认 ✓ 点击可重发'
+      btnAIStart.textContent = (aiConfirmed && !aiPickAckTimer) ? '已确认 ✓ 点击可重发' : (aiPickAckTimer ? '确认中...' : '确认风格');
       btnAIStart.classList.toggle('waiting', !aiLocalPickId);
     }
   }
@@ -1079,6 +1083,10 @@
   // ===== 更新公告: 点击版本号显示近三次更新(倒序: 最新在前; 每条用短句概括改动, 一点一换行; 每次发版须 prepend 一条真实版本) =====
   // 文案规则: 每条不超过 30 字, 一条一个圆点, 折行不再出点(见 .cl-pt 悬挂缩进)
   const CHANGELOG = [
+    ['v183', [
+      '修复选风格确认不同步: 确认消息无限重发直到收到回执',
+      '修正"房主已收到"误报文案(实际未送达时显示等待); 选风格屏UI每秒自愈刷新'
+    ]],
     ['v182', [
       '修复建房概率卡死: 信令超时30s自动提示重试(host/client双端)',
       '信令服务器偶发慢时不再永久卡在"正在创建房间"'
