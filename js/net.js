@@ -22,6 +22,8 @@
 // 动态拉取失败(网络/CORS)时回退到下方 TURN_SERVERS_FALLBACK(jp 优先 + sg/global 兜底, 均已验证可 Allocate)。
 const METERED_TURN_API = 'https://zmrly5555.metered.live/api/v1/turn/credentials?apiKey=4abe49e452ba47643a733c4b71c10063eac9&region=japan';
 const TURN_SERVERS_FALLBACK = [
+  // [v175] 国内免费 TURN(腾讯云北京, ping~43ms): 来自 zhaosonghan.com 公共测试服, 国内延迟远低于日本节点
+  { urls: 'turn:43.138.235.180:9002', username: 'pma', credential: 'mypwd' },
   // 静态兜底(REST API 不可达时): 日本优先(实测延迟最低) + 新加坡/global 兜底(凭据 5bd3b7... 均 Allocate 实测成功)
   { urls: 'turn:jp.relay.metered.ca:80', username: '5bd3b785c789d8a13597e5bf', credential: 'VI7kyJaVnLrlIcLU' },
   { urls: 'turn:jp.relay.metered.ca:80?transport=tcp', username: '5bd3b785c789d8a13597e5bf', credential: 'VI7kyJaVnLrlIcLU' },
