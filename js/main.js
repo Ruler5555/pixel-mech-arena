@@ -154,11 +154,12 @@
   // [v164] 真实通道: getChannelDetail() 识别 ICE 实际候选类型(直连/TURN中继), 避免"P2P标签骗人"
   // [v184] 统一连接模式文案: 基于真实通道(不误用预期模式 getMode)
   //   getStateChannel 区分 MQTT 中继兜底; getChannelDetail 区分 WebRTC 内的 TURN 中继/真直连
+  // [v188] 兜底文案: getStats 读不到(getChannelDetail==='')时诚实标"P2P(未知)", 不再误报"P2P"(会把未知伪装成直连, 误导"P2P却上千"判断)
   function channelLabel() {
     if (Net.getStateChannel() === 'relay') return '中继';
     if (Net.getChannelDetail() === 'relay') return 'TURN中继';
     if (Net.getChannelDetail() === 'direct') return 'P2P直连';
-    return 'P2P';
+    return 'P2P(未知)';
   }
   function updateNetTags() {
     const setMode = (el) => {
@@ -167,7 +168,7 @@
       if (Net.getStateChannel() === 'relay') m = '中继';
       else if (Net.getChannelDetail() === 'relay') m = 'TURN中继';
       else if (Net.getChannelDetail() === 'direct') m = 'P2P直连';
-      else m = 'P2P';
+      else m = 'P2P(未知)';  // v188: 兜底诚实标未知(原'P2P'会把getStats读不到误报为直连)
       if (game.mode === 'offline') {
         el.textContent = '离线 vs AI';
       } else if (game.mode === 'host' || game.mode === 'aiHost') {
@@ -1091,6 +1092,10 @@
   // ===== 更新公告: 点击版本号显示近三次更新(倒序: 最新在前; 每条用短句概括改动, 一点一换行; 每次发版须 prepend 一条真实版本) =====
   // 文案规则: 每条不超过 30 字, 一条一个圆点, 折行不再出点(见 .cl-pt 悬挂缩进)
   const CHANGELOG = [
+    ['v188', [
+      '修正通道标签:读不到时标P2P(未知)不再误报直连',
+      '候选对优先取nominated+跨局重置,标签更准'
+    ]],
     ['v187', [
       '自建TURN优先(中继走北京机房20-40ms)',
       '修复:之前动态拉取Metered时自建没被用上'

@@ -445,8 +445,10 @@ const Net = (() => {
         try {
           const stats = await pc.getStats();
           let sel = null;
+          // [v188] 优先 nominated(真正被选中的对); 老浏览器不标 nominated 时退回任意 succeeded
           stats.forEach((r) => {
-            if (r.type === 'candidate-pair' && r.state === 'succeeded' && !sel) sel = r;
+            if (r.type !== 'candidate-pair' || r.state !== 'succeeded') return;
+            if (!sel || (r.nominated && !sel.nominated)) sel = r;
           });
           if (sel && sel.localCandidateId) {
             const local = stats.get(sel.localCandidateId);
@@ -526,6 +528,7 @@ const Net = (() => {
 
   function _cleanupP2P() {
     _stopKeepAlive();
+    _channelDetail = '';   // [v188] 重置通道状态, 防跨局残留上一局标签(旧'relay/direct'会误显示)
     try { if (conn && conn.open) conn.close(); } catch (e) {}
     try { if (peer) peer.destroy(); } catch (e) {}
     conn = null; peer = null;
