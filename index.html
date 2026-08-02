@@ -15,7 +15,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" media="print" onload="this.media='all'">
 <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap"></noscript>
-<link rel="stylesheet" href="css/style.css?v=200">
+<link rel="stylesheet" href="css/style.css?v=201">
 </head>
 <body>
 <div id="app">
@@ -23,7 +23,7 @@
   <!-- ===== 全局常驻边缘: 规则 + 版本号(所有界面可见, 不滚动即可见) ===== -->
   <div id="persistEdge">
     <button id="rulesBtn" class="edge-btn" aria-label="游戏规则">规则?</button>
-    <span id="versionTag" class="version-tag">v200</span>
+    <span id="versionTag" class="version-tag">v201</span>
   </div>
 
   <!-- ===== 登录界面 ===== -->
@@ -84,11 +84,11 @@
       <h2 class="hub-title">选择模式</h2>
       <p class="hub-tip">与 AI 单练, 或拉朋友联机对战</p>
 
-      <!-- 副本: 与 AI 对战(原单人离线, 蓝) -->
+      <!-- 本地游玩: 与 AI 对战(原单人离线, 蓝) -->
       <button id="btnOffline" class="hub-btn blue">
         <span class="hb-ico">🤖</span>
-        <span class="hb-txt">单人模式</span>
-        <span class="hb-sub">单人 vs AI</span>
+        <span class="hb-txt">本地游玩</span>
+        <span class="hb-sub">本地 1v1 AI</span>
       </button>
 
       <!-- 联机大厅: 创建/加入房间(红) -->
@@ -104,7 +104,7 @@
   <div id="modeSelect" class="hidden">
     <div class="ms-top">
       <button id="btnModeBack" class="bar-btn">← 返回</button>
-      <span class="ms-title">选择单人模式玩法</span>
+      <span class="ms-title">选择本地玩法</span>
       <span class="ol-spacer"></span>
     </div>
     <div class="ms-body">
@@ -171,14 +171,14 @@
       <button id="btnOnlineModePvP" class="ms-mode-btn blue">
         <span class="ms-mode-ico">⚔️</span>
         <span class="ms-mode-txt">
-          <span class="hb-txt">双人对战</span>
+          <span class="hb-txt">经典双人对战</span>
           <span class="hb-sub">1v1 实时联机</span>
         </span>
       </button>
       <button id="btnOnlineModeAIvAI" class="ms-mode-btn ai">
         <span class="ms-mode-ico">🤖</span>
         <span class="ms-mode-txt">
-          <span class="hb-txt">AI 对战</span>
+          <span class="hb-txt">AI 双人对战</span>
           <span class="hb-sub">各自训练机甲 AI · 观战自动对打</span>
         </span>
       </button>
@@ -186,7 +186,7 @@
     </div>
   </div>
 
-  <!-- ===== AI 对战 · 选风格屏(双方各自为机甲 AI 选战斗风格, 然后观战对打) ===== -->
+  <!-- ===== AI 双人对战 · 选风格屏(双方各自为机甲 AI 选战斗风格, 然后观战对打) ===== -->
   <div id="aiPickScreen" class="hidden">
     <!-- [v136] 顶栏改为与对局相同布局: 延迟 + 模式 + 退出(取代原 v130 左上返回键), 退出键保留连接返回等待大厅 -->
     <div class="top-cluster ai-pick-topbar">
@@ -207,7 +207,7 @@
   <div id="roomLobby" class="hidden">
     <div class="room-lobby-box">
       <h2 class="room-title">等待大厅</h2>
-      <div id="roomModeTag" class="room-mode-tag">⚔️ 双人对战 · 1v1</div>
+      <div id="roomModeTag" class="room-mode-tag">⚔️ 经典双人对战 · 1v1</div>
       <div class="room-code-display">
         <div class="room-code-label">房间号</div>
         <div class="room-code" id="roomLobbyCode">------</div>
@@ -309,10 +309,10 @@
     <div class="info-card">
       <div class="info-title">游戏规则</div>
       <div class="info-body">
-        <p>· 三局两胜(BO3),每回合 60 秒(联机 AI 对战为 30 秒),时间到比血量,高者胜;同血平局</p>
-        <p>· 血量上限 100(联机 AI 对战为 120),显示在各自血条下方,受击后实时更新</p>
+        <p>· 三局两胜(BO3),每回合 60 秒(联机 AI 双人对战为 30 秒),时间到比血量,高者胜;同血平局</p>
+        <p>· 血量上限 100(联机 AI 双人对战为 120),显示在各自血条下方,受击后实时更新</p>
         <p>· 轻击:伤害 8,出手快后摇短;重击:伤害 18,出手慢,破防惩罚强</p>
-        <p>· 防御:减伤 80% 并反弹 50% 伤害给攻击者,但防御时不能移动</p>
+        <p>· 防御:减伤 90% 并反弹 60% 伤害给攻击者,但防御时不能移动</p>
         <p>· 二段跳可空中走位,但空中不能攻击</p>
         <p>· 键盘: A/D 移动 · W 跳 · J 轻击 · K 重击 · L 防御</p>
         <p>· 移动端: 左下方向滑杆,右下 轻击/重击/防御/跳跃</p>
@@ -325,13 +325,14 @@
     <div class="info-card">
       <div class="info-title">连不上怎么办?</div>
       <div class="info-body">
-        <p>① 加房后一直「等待主机开始」: 让房主点「开始对战」即可,这是正常流程</p>
-        <p>② 右上角一直「测速中…」: 还在连接;显示「延迟 Xms」= 已连上(P2P 最快)</p>
-        <p>③ 显示「中继」且很卡: 你家/对方是对称 NAT,正走免费 TURN 中转(正常);若卡到没法玩,让任一方切到同一 WiFi 或开手机流量</p>
-        <p>④ 突然断开: 游戏会自动重连,等几秒;仍不行点退出回大厅重进</p>
-        <p>⑤ 世界频道看不到房间: 只有点过「分享到世界」的房间才会出现</p>
-        <p>⑥ 微信里打不开/空白: 杀掉页面重进强刷,微信缓存很顽固</p>
-        <p class="warn-text">· 中继模式为公共信道,请勿在对局中输入隐私信息</p>
+        <p>① 加入中进度条卡住不动: 等 10 秒仍不动,点「取消加入」后重新加入</p>
+        <p>② 提示「主机暂时不可达」: 房主可能刚退房,换一个房间或让房主重新建房</p>
+        <p>③ 右上角一直「测速中…」: 还在建通道,稍等;变「延迟 Xms」= 已连上</p>
+        <p>④ 进房后一直「等待主机开始」: 这是正常流程,等房主点「开始对战」</p>
+        <p>⑤ 标签说明: 「P2P直连」= 直连(同网/IPv6);「TURN中继」= 跨网走北京机房中转,延迟 40-50ms 属正常</p>
+        <p>⑥ 世界频道看不到房间: 只有房主点过「分享到世界」的房间才会出现</p>
+        <p>⑦ 微信里打不开/空白: 杀掉页面重进强刷,微信缓存很顽固</p>
+        <p class="warn-text">· 联机为公共信道,请勿在对局中输入隐私信息</p>
       </div>
       <button class="info-close" data-close="helpPop">知道了</button>
     </div>
@@ -340,16 +341,16 @@
 </div>
 
 <!-- 所有脚本加 defer: 并行下载、按序执行、不阻塞首屏 DOM 解析; 加快首屏可点 -->
-<script defer src="vendor/peerjs.min.js?v=200"></script>
-<script defer src="vendor/mqtt.min.js?v=200"></script>
-<script defer src="js/auth.js?v=200"></script>
-<script defer src="js/world.js?v=200"></script>
-<script defer src="js/input.js?v=200"></script>
-<script defer src="js/touch.js?v=200"></script>
-<script defer src="js/sprite.js?v=200"></script>
-<script defer src="js/player.js?v=200"></script>
-<script defer src="js/net.js?v=200"></script>
-<script defer src="js/game.js?v=200"></script>
-<script defer src="js/main.js?v=200"></script>
+<script defer src="vendor/peerjs.min.js?v=201"></script>
+<script defer src="vendor/mqtt.min.js?v=201"></script>
+<script defer src="js/auth.js?v=201"></script>
+<script defer src="js/world.js?v=201"></script>
+<script defer src="js/input.js?v=201"></script>
+<script defer src="js/touch.js?v=201"></script>
+<script defer src="js/sprite.js?v=201"></script>
+<script defer src="js/player.js?v=201"></script>
+<script defer src="js/net.js?v=201"></script>
+<script defer src="js/game.js?v=201"></script>
+<script defer src="js/main.js?v=201"></script>
 </body>
 </html>

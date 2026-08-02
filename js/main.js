@@ -419,7 +419,7 @@
     slotP1Name.textContent = currentPlayer ? currentPlayer.name : '玩家';
     // 等待大厅标明本房玩法, 避免创建后不知道自己开的是哪种房
     if (roomModeTag) {
-      roomModeTag.textContent = roomMode === 'ai' ? '🤖 AI 对战 · 观战 BO3' : '⚔️ 双人对战 · 1v1';
+      roomModeTag.textContent = roomMode === 'ai' ? '🤖 AI 双人对战 · 观战 BO3' : '⚔️ 经典双人对战 · 1v1';
       roomModeTag.className = 'room-mode-tag' + (roomMode === 'ai' ? ' ai' : '');
     }
     // 开始键文案: AI 对战房点了先进选风格屏, 而不是直接开打
@@ -1071,7 +1071,7 @@
       document.body.classList.add('ai-spectate'); // [v136] 等待房主选风格阶段即隐藏触控操作键(观战前奏)
       if (game.running) return; // 已在局内(已选风格开打), 不再弹"等待房主选风格"遮罩
       if (!aiPickScreen.classList.contains('hidden')) return; // 已在选风格屏则不打断
-      showOverlay('已连接', '🤖 AI 对战房\n等待房主开始选风格...', '');
+      showOverlay('已连接', '🤖 AI 双人对战房\n等待房主开始选风格...', '');
     });
     Net.on('aipickstart', () => {
       // host 已点「进入选风格」: client 同步进选风格屏。房主会补发 2 次做冗余, 这里保持幂等
@@ -1086,7 +1086,7 @@
       if (game.running) return; // 已在局内, 房主反悔不应打断对局
       aiLocalPickId = null; aiConfirmed = false;
       showGame();
-      showOverlay('已连接', '🤖 AI 对战房\n房主返回了等待大厅...', '');
+      showOverlay('已连接', '🤖 AI 双人对战房\n房主返回了等待大厅...', '');
     });
     Net.on('aipick', (id) => {
       // host 收到 client 选的风格(client 可重选, 以最后一次为准)
@@ -1178,6 +1178,12 @@
   // ===== 更新公告: 点击版本号显示近三次更新(倒序: 最新在前; 每条用短句概括改动, 一点一换行; 每次发版须 prepend 一条真实版本) =====
   // 文案规则: 每条不超过 30 字, 一条一个圆点, 折行不再出点(见 .cl-pt 悬挂缩进)
   const CHANGELOG = [
+    ['v201', [
+      '规则详情文本与机制同步(防御90%/反弹60%)',
+      '重写「连不上?」帮助(适配新架构)',
+      '单人模式改名「本地游玩」',
+      '玩法改名:经典双人对战/AI双人对战'
+    ]],
     ['v200', [
       'AI对战再来一局=重置风格重新选,换阵容再开'
     ]],
