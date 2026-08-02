@@ -428,7 +428,7 @@ class Game {
       // [v177] 中继降频双保险: getChannelDetail(getStats轮询)在部分浏览器失效 → 加 RTT 兜底。
       // [v185] 中继 15Hz→10Hz: 进一步降低中继丢包重传压力(用户实测中继链路 1000ms+, 降频减轻堆积)。
       //   rtt>150ms(中继/丢包特征)或检测到 relay → 10Hz; 直连低延迟 → 30Hz。
-      // [v194] 加 15Hz 中间档: 北京中继 RTT 仅 40-50ms(<150 不触发 10Hz)+ getChannelDetail vivo 读不到
+      // [v194] 加 15Hz 中间档: 北京节点中继 RTT 仅 40-50ms(<150 不触发 10Hz)+ getChannelDetail vivo 读不到
       //   → 中继之前 30Hz 满速丢帧卡顿。rtt>35 即视为中继/高延迟路径 → 15Hz(v185 前先例: 15Hz 观战反而更顺)。
       // [v194→v195] 15Hz 档已回退: v193 改 unreliable 后堆积问题已消除, 30Hz 不再滚雪球;
       //   用户实测 15Hz 观战体验下降 + 特效卡顿与 Hz 无关(观战端缺缓冲插值, v195 已补)

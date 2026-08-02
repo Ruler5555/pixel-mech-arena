@@ -15,7 +15,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" media="print" onload="this.media='all'">
 <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap"></noscript>
-<link rel="stylesheet" href="css/style.css?v=201">
+<link rel="stylesheet" href="css/style.css?v=202">
 </head>
 <body>
 <div id="app">
@@ -23,7 +23,7 @@
   <!-- ===== 全局常驻边缘: 规则 + 版本号(所有界面可见, 不滚动即可见) ===== -->
   <div id="persistEdge">
     <button id="rulesBtn" class="edge-btn" aria-label="游戏规则">规则?</button>
-    <span id="versionTag" class="version-tag">v201</span>
+    <span id="versionTag" class="version-tag">v202</span>
   </div>
 
   <!-- ===== 登录界面 ===== -->
@@ -329,7 +329,7 @@
         <p>② 提示「主机暂时不可达」: 房主可能刚退房,换一个房间或让房主重新建房</p>
         <p>③ 右上角一直「测速中…」: 还在建通道,稍等;变「延迟 Xms」= 已连上</p>
         <p>④ 进房后一直「等待主机开始」: 这是正常流程,等房主点「开始对战」</p>
-        <p>⑤ 标签说明: 「P2P直连」= 直连(同网/IPv6);「TURN中继」= 跨网走北京机房中转,延迟 40-50ms 属正常</p>
+        <p>⑤ 标签说明: 「P2P直连」= 直连(同网/IPv6);「TURN中继」= 跨网走北京节点中转,延迟 40-50ms 属正常</p>
         <p>⑥ 世界频道看不到房间: 只有房主点过「分享到世界」的房间才会出现</p>
         <p>⑦ 微信里打不开/空白: 杀掉页面重进强刷,微信缓存很顽固</p>
         <p class="warn-text">· 联机为公共信道,请勿在对局中输入隐私信息</p>
@@ -341,16 +341,16 @@
 </div>
 
 <!-- 所有脚本加 defer: 并行下载、按序执行、不阻塞首屏 DOM 解析; 加快首屏可点 -->
-<script defer src="vendor/peerjs.min.js?v=201"></script>
-<script defer src="vendor/mqtt.min.js?v=201"></script>
-<script defer src="js/auth.js?v=201"></script>
-<script defer src="js/world.js?v=201"></script>
-<script defer src="js/input.js?v=201"></script>
-<script defer src="js/touch.js?v=201"></script>
-<script defer src="js/sprite.js?v=201"></script>
-<script defer src="js/player.js?v=201"></script>
-<script defer src="js/net.js?v=201"></script>
-<script defer src="js/game.js?v=201"></script>
-<script defer src="js/main.js?v=201"></script>
+<script defer src="vendor/peerjs.min.js?v=202"></script>
+<script defer src="vendor/mqtt.min.js?v=202"></script>
+<script defer src="js/auth.js?v=202"></script>
+<script defer src="js/world.js?v=202"></script>
+<script defer src="js/input.js?v=202"></script>
+<script defer src="js/touch.js?v=202"></script>
+<script defer src="js/sprite.js?v=202"></script>
+<script defer src="js/player.js?v=202"></script>
+<script defer src="js/net.js?v=202"></script>
+<script defer src="js/game.js?v=202"></script>
+<script defer src="js/main.js?v=202"></script>
 </body>
 </html>

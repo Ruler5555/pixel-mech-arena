@@ -17,7 +17,7 @@
 //   (无头 Chrome 实测: relay 策略候选收集 0 个, ICE 直接 disconnected; 原生 RTCPeerConnection 同配置正常)。
 //   workaround: policy 'all' + 无 STUN → 没有 host/srflx 候选来源 → ICE 只能收集 relay 候选 = 等效强制中继,
 //   且 PeerJS 完全兼容(无头 Edge 实测 CONN OPEN ✅)。
-//   自建北京 TURN 优先(固定机房链路 40-50ms 零波动) + Metered jp/sg/global 兜底(服务器挂时保连接)。
+//   自建北京 TURN 优先(固定节点链路 40-50ms 零波动) + Metered jp/sg/global 兜底(服务器挂时保连接)。
 //   ⚠️ 单点: 自建服务器 2026-09-01 到期未续费 → 自动走 Metered 兜底(海外高延迟但可连)。
 const TURN_SERVERS = [
   { urls: 'turn:59.110.237.91:3478?transport=udp', username: 'pma', credential: '94e0013bacd62748' },
@@ -64,7 +64,7 @@ const Net = (() => {
   let _channelDetail = '';    // v164: 真实 ICE 通道 ''未知 / 'direct'直连 / 'relay'TURN中继
   let _channelTimer = null;   // v164: 轮询 selected candidate pair 的定时器
   // [v181] MQTT 仅保进房: P2P 20s 未握手才启动 MQTT 兜底(只承载握手+低频控制消息,
-  //   对局数据 state/input 永不走 MQTT)。P2P/TURN 连上即正常对局(对齐 v110 的"保联机房"设计)。
+  //   对局数据 state/input 永不走 MQTT)。P2P/TURN 连上即正常对局(对齐 v110 的"保联节点"设计)。
   let mqttClient = null;      // MQTT 兜底客户端(EMQX/HiveMQ 公共 broker)
   let relayTopic = null;      // MQTT 房间 topic: pma26/<code>
   let relayDeadline = null;   // 20s 未握手 → 启动 MQTT 兜底的定时器
