@@ -635,13 +635,25 @@
   function checkRematchGo() {
     if (!(rmLocal && rmRemote)) return;
     resetRematchState();
-    if (game.mode === 'host' || game.mode === 'aiHost') {
+    if (game.mode === 'aiHost') {
+      // [v200] AI 对战重赛 = 真正重来一局: 重置上局风格 → 双方重新进选风格屏 → 房主点「开始对战」再开。
+      //   (原实现直接 resetMatch+start 立即重开, 无法换风格)
+      hostPickId = null; clientPickId = null; aiLocalPickId = null; aiConfirmed = false;
+      hideOverlay();
+      Net.sendAiPickStart(); // 通知 client 同步进选风格屏(aips 幂等, 补发 2 次防丢)
+      setTimeout(() => { if (Net.isConnected()) Net.sendAiPickStart(); }, 500);
+      setTimeout(() => { if (Net.isConnected()) Net.sendAiPickStart(); }, 1500);
+      showAIPickScreen();
+      return;
+    }
+    if (game.mode === 'host') {
       Net.sendReset(); // 通知客户端同步重开
       game.resetMatch();
       game.start();
       hideOverlay();
     } else {
-      showOverlay('再来一局', '双方已确认\n等待主机开局...', '');
+      // client: aiClient 重赛等 host 发 aips 进选风格; client(PvP)等 host 发 reset 开局
+      showOverlay('再来一局', '双方已确认\n' + (game.mode === 'aiClient' ? '等待主机进入选风格...' : '等待主机开局...'), '');
     }
   }
 
@@ -1166,6 +1178,9 @@
   // ===== 更新公告: 点击版本号显示近三次更新(倒序: 最新在前; 每条用短句概括改动, 一点一换行; 每次发版须 prepend 一条真实版本) =====
   // 文案规则: 每条不超过 30 字, 一条一个圆点, 折行不再出点(见 .cl-pt 悬挂缩进)
   const CHANGELOG = [
+    ['v200', [
+      'AI对战再来一局=重置风格重新选,换阵容再开'
+    ]],
     ['v199', [
       '加入房间显示进度百分比,卡住即停+预计耗时',
       '加入中可取消:返回键/取消按钮立即断开'
