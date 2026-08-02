@@ -78,7 +78,9 @@ const Net = (() => {
   };
   function on(ev, fn) { (handlers[ev] || []).push(fn); }
   function emit(ev, arg) { (handlers[ev] || []).forEach(fn => { try { fn(arg); } catch (e) {} }); }
-  function progress(msg) { emit('progress', msg); }
+  // [v199] progress 带可选百分比(0-100): 加入/建房进度可视化。pct 不传时 null(阶段无进度含义, UI 保持当前值)
+  function progress(msg, pct) { emit('progress', { text: msg, pct: (pct === undefined ? null : pct) }); }
+  let signalFailTimer = null; // v199: 信令超时定时器提为模块级(供 abortJoin 清理)
   function setName(n) { playerName = n || ''; }
   function genCode() { return String(Math.floor(100000 + Math.random() * 900000)); }
 
@@ -103,7 +105,7 @@ const Net = (() => {
     return new Promise((resolve, reject) => {
       role = 'host'; roomCode = genCode(); handshaked = false; mode = 'p2p';
 
-      progress('正在获取 TURN 穿透服务...');
+      progress('正在获取 TURN 穿透服务...', 5);
       buildIceServers().then((ice) => {
       let resolved = false;
       const finish = (code) => {
@@ -118,21 +120,21 @@ const Net = (() => {
       //   30s 仍失败 → reject 让上层提示重试(建房永不永久卡)。
       const signalRetryTimer = setTimeout(() => {
         if (peer && !peer.destroyed && !peer.open && !resolved) {
-          progress('信令连接慢, 正在重试...');
+          progress('信令连接慢, 正在重试...', 8);
           try { peer.reconnect(); } catch (e) {}
         }
       }, 15000);
-      const signalFailTimer = setTimeout(() => {
+      signalFailTimer = setTimeout(() => {
         if (resolved) return;
         try { clearTimeout(signalRetryTimer); } catch (e) {}
         try { if (peer && !peer.destroyed) peer.destroy(); } catch (e) {}
-        peer = null;
+        peer = null; signalFailTimer = null;
         reject(new Error('信令连接超时, 请重试'));
       }, 30000);
 
       peer.on('open', () => {
-        clearTimeout(signalRetryTimer); clearTimeout(signalFailTimer);
-        progress('信令已就绪, 等待对手(P2P 直连优先)...');
+        clearTimeout(signalRetryTimer); clearTimeout(signalFailTimer); signalFailTimer = null;
+        progress('信令已就绪, 等待对手(P2P 直连优先)...', 20);
         finish(roomCode);
         // v181: 20s 未握手 → 启动 MQTT 兜底(仅保进房, 不承载对局数据)
         relayDeadline = setTimeout(() => { if (!handshaked) _startRelayListen(roomCode); }, 20000);
@@ -145,7 +147,7 @@ const Net = (() => {
           try { conn.close(); } catch (e) {}
         }
         conn = c; mode = 'p2p';
-        progress('P2P 直连已建立');
+        progress('P2P 直连已建立', 100);
         bindConn(c);
       });
 
@@ -153,7 +155,7 @@ const Net = (() => {
 
       peer.on('error', (err) => {
         if (err.type === 'unavailable-id') {
-          progress('房号冲突, 换号重试...');
+          progress('房号冲突, 换号重试...', 8);
           clearTimeout(signalRetryTimer); clearTimeout(signalFailTimer);
           try { peer.destroy(); } catch (e) {}
           roomCode = genCode();
@@ -172,7 +174,7 @@ const Net = (() => {
     return new Promise((resolve, reject) => {
       role = 'client'; roomCode = code; handshaked = false; mode = 'p2p';
 
-      progress('正在获取 TURN 穿透服务...');
+      progress('正在获取 TURN 穿透服务...', 5);
       _joinResolve = (c) => { resolve(c); };
       _joinReject = (e) => { reject(e); };
       buildIceServers().then((ice) => {
@@ -180,17 +182,17 @@ const Net = (() => {
         catch (e) { reject(e); return; }
 
         // v182: 信令超时兜底(client 侧, 与 host 对称) —— 信令偶发慢时 joinRoom 不永久卡
-        const signalFailTimer = setTimeout(() => {
+        signalFailTimer = setTimeout(() => {
           if (peer && !peer.open && _joinReject) {
             try { if (peer && !peer.destroyed) peer.destroy(); } catch (e) {}
-            peer = null;
+            peer = null; signalFailTimer = null;
             _joinReject(new Error('信令连接超时, 请重试'));
           }
         }, 30000);
 
         peer.on('open', () => {
-          clearTimeout(signalFailTimer);
-          progress('信令已就绪, 正在尝试 P2P 直连...');
+          clearTimeout(signalFailTimer); signalFailTimer = null;
+          progress('信令已就绪, 正在尝试 P2P 直连...', 20);
           _tryP2pConnect();
           // v181: 20s 未握手 → 启动 MQTT 兜底(仅保进房, 不承载对局数据)
           relayDeadline = setTimeout(() => { if (!handshaked) _startRelayListen(code); }, 20000);
@@ -200,8 +202,8 @@ const Net = (() => {
 
         peer.on('error', (err) => {
           // peer-unavailable 多为瞬态(主机信令尚未就绪), 重试由 _tryP2pConnect 的超时驱动
-          if (err.type === 'peer-unavailable') { progress('主机暂时不可达, 重试 P2P...'); return; }
-          progress('信令错误: ' + err.type);
+          if (err.type === 'peer-unavailable') { progress('主机暂时不可达, 重试 P2P...', 80); return; }
+          progress('信令错误: ' + err.type, 80);
         });
       }).catch((e) => reject(e));
     });
@@ -219,7 +221,7 @@ const Net = (() => {
     if (conn && !conn.open) { try { conn.close(); } catch (e) {} }
     conn = null;
     p2pConnectAttempts++;
-    progress('P2P 直连尝试 ' + p2pConnectAttempts + ' 次...');
+    progress('P2P 直连尝试 ' + p2pConnectAttempts + ' 次...', Math.min(80, 20 + p2pConnectAttempts * 10));
     const c = peer.connect(PEER_PREFIX + roomCode, { reliable: false, serialization: 'json' });
     conn = c; bindConn(c);
     p2pRetryTimer = setTimeout(() => {
@@ -229,8 +231,20 @@ const Net = (() => {
   }
 
   // 用户取消连接(返回大厅): 解阻塞 joinRoom
+  // [v199] 取消加入(用户主动): 立即 reject + 销毁 peer + 清全部 timers, 防止后台泄漏/握手成功后强行进对局
   function abortJoin() {
-    if (_joinReject) { const r = _joinReject; _joinReject = null; _joinResolve = null; r(new Error('已取消')); }
+    if (!_joinResolve && !_joinReject) return false;
+    try { if (conn && !conn.open) conn.close(); } catch (e) {}
+    try { if (peer && !peer.destroyed) peer.destroy(); } catch (e) {}
+    peer = null; conn = null;
+    clearTimeout(p2pRetryTimer); p2pRetryTimer = null;
+    clearTimeout(relayDeadline); relayDeadline = null;
+    if (signalFailTimer) { clearTimeout(signalFailTimer); signalFailTimer = null; }
+    if (mqttClient) { try { mqttClient.end(true); } catch (e) {} mqttClient = null; }
+    _stopPingMonitor();
+    const rj = _joinReject; _joinReject = null; _joinResolve = null;
+    if (rj) rj(new Error('已取消加入'));
+    return true;
   }
 
   // ============ [v181] MQTT 仅保进房兜底 ============
@@ -260,7 +274,7 @@ const Net = (() => {
       } catch (e) { tryBroker(idx + 1); return; }
       let helloRetryTimer = null;
       mqttClient.on('connect', () => {
-        progress('中继兜底已连接(' + tag + '), 正在走通进房流程...');
+        progress('中继兜底已连接(' + tag + '), 正在走通进房流程...', 85);
         try { mqttClient.subscribe(relayTopic, { qos: 0 }); } catch (e) {}
         // client 且尚未握手: 通过 MQTT 发 hello 兜底握手(重试直到握手完成)
         if (role === 'client' && !handshaked) {
@@ -356,7 +370,7 @@ const Net = (() => {
   function bindConn(c) {
     _watchSelectedPair(c);  // v164: 检测真实 ICE 通道(直连/TURN中继)
     c.on('open', () => {
-      progress('P2P 已建立');
+      progress('P2P 已建立', 100);
       _startPingMonitor();
       try { c.send({ t: 'hello', n: playerName, q: ++sendSeq }); } catch (e) {}
     });

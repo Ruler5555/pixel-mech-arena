@@ -15,7 +15,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" media="print" onload="this.media='all'">
 <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap"></noscript>
-<link rel="stylesheet" href="css/style.css?v=198">
+<link rel="stylesheet" href="css/style.css?v=199">
 </head>
 <body>
 <div id="app">
@@ -23,7 +23,7 @@
   <!-- ===== 全局常驻边缘: 规则 + 版本号(所有界面可见, 不滚动即可见) ===== -->
   <div id="persistEdge">
     <button id="rulesBtn" class="edge-btn" aria-label="游戏规则">规则?</button>
-    <span id="versionTag" class="version-tag">v198</span>
+    <span id="versionTag" class="version-tag">v199</span>
   </div>
 
   <!-- ===== 登录界面 ===== -->
@@ -133,6 +133,15 @@
       <div class="lobby-join">
         <input id="roomInput" class="lobby-input" inputmode="numeric" maxlength="6" placeholder="输入房号">
         <button id="btnJoin" class="lobby-btn">加入</button>
+      </div>
+      <!-- [v199] 加入进度: 百分比+预计耗时+取消加入 -->
+      <div id="joinProgressWrap" class="join-progress-wrap hidden">
+        <div class="join-progress"><div class="join-progress-fill" id="joinProgressFill"></div></div>
+        <div class="join-progress-info">
+          <span id="joinPctText" class="join-pct">0%</span>
+          <span id="joinEtaText" class="join-eta"></span>
+          <button id="joinCancelBtn" class="lobby-btn join-cancel-btn">取消加入</button>
+        </div>
       </div>
       <div id="lobbyStatus" class="lobby-status"></div>
 
@@ -331,16 +340,16 @@
 </div>
 
 <!-- 所有脚本加 defer: 并行下载、按序执行、不阻塞首屏 DOM 解析; 加快首屏可点 -->
-<script defer src="vendor/peerjs.min.js?v=198"></script>
-<script defer src="vendor/mqtt.min.js?v=198"></script>
-<script defer src="js/auth.js?v=198"></script>
-<script defer src="js/world.js?v=198"></script>
-<script defer src="js/input.js?v=198"></script>
-<script defer src="js/touch.js?v=198"></script>
-<script defer src="js/sprite.js?v=198"></script>
-<script defer src="js/player.js?v=198"></script>
-<script defer src="js/net.js?v=198"></script>
-<script defer src="js/game.js?v=198"></script>
-<script defer src="js/main.js?v=198"></script>
+<script defer src="vendor/peerjs.min.js?v=199"></script>
+<script defer src="vendor/mqtt.min.js?v=199"></script>
+<script defer src="js/auth.js?v=199"></script>
+<script defer src="js/world.js?v=199"></script>
+<script defer src="js/input.js?v=199"></script>
+<script defer src="js/touch.js?v=199"></script>
+<script defer src="js/sprite.js?v=199"></script>
+<script defer src="js/player.js?v=199"></script>
+<script defer src="js/net.js?v=199"></script>
+<script defer src="js/game.js?v=199"></script>
+<script defer src="js/main.js?v=199"></script>
 </body>
 </html>

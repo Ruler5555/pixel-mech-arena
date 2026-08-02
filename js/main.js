@@ -749,7 +749,10 @@
 
   // Hub → 联机大厅 / 返回 Hub
   if (btnOpenOnline) btnOpenOnline.addEventListener('click', () => { showOnlineHub(); });
-  if (btnBackHub) btnBackHub.addEventListener('click', () => { showLobby(); });
+  if (btnBackHub) btnBackHub.addEventListener('click', () => {
+    if (joinState) cancelJoinNow(); // [v199] 加入中返回 → 立刻断开加入状态(不再"返回了还在后台加入")
+    showLobby();
+  });
 
   btnHost.addEventListener('click', () => showOnlineModeSelect());
 
@@ -927,17 +930,67 @@
   };
   cancelBtn.addEventListener('click', onCancel);
 
+  // ===== [v199] 加入房间: 进度百分比 + 预计耗时 + 取消加入 =====
+  const joinProgressWrap = document.getElementById('joinProgressWrap');
+  const joinProgressFill = document.getElementById('joinProgressFill');
+  const joinPctText = document.getElementById('joinPctText');
+  const joinEtaText = document.getElementById('joinEtaText');
+  const joinCancelBtn = document.getElementById('joinCancelBtn');
+  let joinState = null;      // { pct: 0-100, startedAt: ms }
+  let joinEtaTimer = null;
+
+  function renderJoinProgress() {
+    if (!joinState) return;
+    const pct = Math.max(0, Math.min(100, Math.round(joinState.pct || 0)));
+    if (joinProgressFill) joinProgressFill.style.width = pct + '%';
+    if (joinPctText) joinPctText.textContent = pct + '%';
+    if (joinEtaText) {
+      // ETA 线性外推: 已用时间/进度 × 剩余进度。卡住时 pct 不变、已用时间增长 → ETA 变大(直观显示"卡了")
+      const elapsed = (Date.now() - joinState.startedAt) / 1000;
+      let eta = null;
+      if (pct > 0 && pct < 100) eta = Math.max(0, Math.round((elapsed / pct) * (100 - pct)));
+      joinEtaText.textContent = (eta !== null && eta <= 180)
+        ? '预计还需 ' + eta + ' 秒'
+        : (pct > 0 ? '仍在连接中...' : '');
+    }
+  }
+  function startJoinProgress() {
+    stopJoinEta();
+    joinState = { pct: 0, startedAt: Date.now() };
+    if (joinProgressWrap) joinProgressWrap.classList.remove('hidden');
+    renderJoinProgress();
+    joinEtaTimer = setInterval(renderJoinProgress, 1000); // 每秒刷新 ETA
+  }
+  function stopJoinEta() { if (joinEtaTimer) { clearInterval(joinEtaTimer); joinEtaTimer = null; } }
+  function resetJoinProgress() {
+    stopJoinEta();
+    joinState = null;
+    if (joinProgressWrap) joinProgressWrap.classList.add('hidden');
+  }
+  // 取消加入: 立即断开(Net.abortJoin 销毁 peer/清 timers), 复位 UI —— 返回键/取消按钮共用
+  function cancelJoinNow() {
+    if (!joinState) return;
+    Net.abortJoin();
+    resetJoinProgress();
+    btnJoin.disabled = false;
+    setStatus('');
+  }
+  if (joinCancelBtn) joinCancelBtn.addEventListener('click', cancelJoinNow);
+
   btnJoin.addEventListener('click', async () => {
     const code = (roomInput.value || '').trim();
     if (!/^\d{6}$/.test(code)) { setStatus('请输入 6 位数字房号', true); return; }
+    if (joinState) return; // [v199] 正在加入中, 忽略重复点击
     setStatus('正在连接 ' + code + loadingDots());
     myRole = 'client'; // 同步置位: game.setMode('client') 在 await 之后才执行, 太晚了
     aiConfirmed = false;
     btnJoin.disabled = true;
+    startJoinProgress(); // [v199] 显示进度条/ETA/取消按钮
     Net.setName(currentPlayer ? currentPlayer.name : '玩家');
     bindNetEvents(); // 先绑定事件, 再连接
     try {
       await Net.joinRoom(code);
+      resetJoinProgress();
       game.setMode('client');
       roleP1.textContent = '对手';
       roleP2.textContent = '你';
@@ -953,8 +1006,11 @@
       setStatus('已加入房间 ' + code + ' (' + mode + ')');
       showOverlay('已连接', '模式: ' + mode + '\n等待主机开始...', '');
     } catch (e) {
-      setStatus('加入失败: ' + (e.message || e), true);
+      const cancelled = e && e.message === '已取消加入';
+      resetJoinProgress();
       btnJoin.disabled = false;
+      if (cancelled) setStatus(''); // [v199] 用户主动取消: 静默复位, 不报错
+      else setStatus('加入失败: ' + (e.message || e), true);
     }
   });
 
@@ -1060,9 +1116,15 @@
       if (game.mode === 'host') game.applyRemoteInput(c);
     });
     Net.on('progress', (msg) => {
+      // [v199] progress 现为 { text, pct }(兼容纯字符串): pct 驱动加入进度条, 卡住时不再发事件 → 百分比停住(同步)
+      const text = (msg && msg.text) ? msg.text : String(msg);
+      if (msg && typeof msg.pct === 'number' && joinState) {
+        joinState.pct = msg.pct;
+        renderJoinProgress();
+      }
       const cur = ovText.textContent || '';
       const lines = cur.split('\n').filter(l => !l.startsWith('['));
-      ovText.textContent = lines.join('\n') + '\n[' + msg + ']';
+      ovText.textContent = lines.join('\n') + '\n[' + text + ']';
     });
     // 对方主动离开(bye) → 回大厅
     Net.on('close', () => {
@@ -1104,6 +1166,10 @@
   // ===== 更新公告: 点击版本号显示近三次更新(倒序: 最新在前; 每条用短句概括改动, 一点一换行; 每次发版须 prepend 一条真实版本) =====
   // 文案规则: 每条不超过 30 字, 一条一个圆点, 折行不再出点(见 .cl-pt 悬挂缩进)
   const CHANGELOG = [
+    ['v199', [
+      '加入房间显示进度百分比,卡住即停+预计耗时',
+      '加入中可取消:返回键/取消按钮立即断开'
+    ]],
     ['v198', [
       '桌面端按 ESC 可退出对局(之前桌面无退出途径)'
     ]],
