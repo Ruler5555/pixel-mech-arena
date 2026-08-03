@@ -303,8 +303,10 @@ class Game {
     this.winsP1 = 0;
     this.winsP2 = 0;
     this._lastStateFrame = 0; // 新对局重置快照序号(允许主机重启后的小 frame)
-    // [v206] 新赛制: 重置牌库状态(双侧) + 骤死标记(机甲血由 _resetMechs 满血初始化)
+    // [v206] 新赛制: 重置牌库状态(双侧) + 骤死标记; 强制血量满血(防 rematch 遗留)
     if (this.totalHpMax) {
+      this.totalHp1 = this.totalHpMax;
+      this.totalHp2 = this.totalHpMax;
       this.suddenDeath = false;
       this.suddenDeathRound = false;
       this.cardState = {
@@ -857,10 +859,11 @@ class Game {
     this.roundWinner = s.rw;
     this.shake = s.shake;
     // [v206] 新赛制: 总血池/骤死/决策倒计时(观战端 HUD)
+    // [v209] 保险: 新对局首帧(round=1+ready+stateTime<0.5)不覆盖本地已重置的满血
+    const isFreshRound = (s.round === 1 && s.gs === 'ready' && (s.gst || 0) < 0.5);
     if (s.thMax) {
       this.totalHpMax = s.thMax;
-      this.totalHp1 = s.th1;
-      this.totalHp2 = s.th2;
+      if (!isFreshRound) { this.totalHp1 = s.th1; this.totalHp2 = s.th2; }
       this.suddenDeath = !!s.sd;
       this.decisionTimer = s.dt || 0;
     }

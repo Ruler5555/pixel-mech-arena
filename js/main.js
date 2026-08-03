@@ -263,6 +263,7 @@
       aiCardRow.appendChild(card);
     });
     aiCardStatus.textContent = '秘密选择中…';
+    aiCardPanel.classList.remove('hidden'); // [v209] 必须先移除 hidden, 否则 !important 会压过 .show
     aiCardPanel.classList.add('show');
     aiDecisionState = 'pending';
     startCardTimer();
@@ -311,7 +312,7 @@
     return p ? p.id : 'balanced';
   }
   function hideCardPanel() {
-    if (aiCardPanel) aiCardPanel.classList.remove('show');
+    if (aiCardPanel) { aiCardPanel.classList.remove('show'); aiCardPanel.classList.add('hidden'); }
     if (aiCardTimerIv) { clearInterval(aiCardTimerIv); aiCardTimerIv = null; }
     aiDecisionState = 'none';
   }
@@ -1097,6 +1098,7 @@
       return;
     }
     game.setMode('aiHost');
+    game.maxHP = 1000; // [v209] 保险: rematch 后再开局强制血量上限 1000
     document.body.classList.add('ai-spectate'); // AI 观战: 隐藏触控操作键
     game.setAIPresets(hostPickId, clientPickId);
     roleP1.textContent = '你的AI';
@@ -1315,6 +1317,7 @@
       // client 收到: 双方风格下发, 开始观战对打
       if (myRole !== 'client' || roomMode !== 'ai') return;
       game.setMode('aiClient');
+      game.maxHP = 1000; // [v209] 保险: rematch 后再开局强制血量上限 1000
       document.body.classList.add('ai-spectate'); // AI 观战: 隐藏触控操作键
       game.setAIPresets(cfg.p1, cfg.p2);
       roleP1.textContent = '对手AI';
@@ -1386,6 +1389,11 @@
   // ===== 更新公告: 点击版本号显示近三次更新(倒序: 最新在前; 每条用短句概括改动, 一点一换行; 每次发版须 prepend 一条真实版本) =====
   // 文案规则: 每条不超过 30 字, 一条一个圆点, 折行不再出点(见 .cl-pt 悬挂缩进)
   const CHANGELOG = [
+    ['v209', [
+      '修复AI双人牌库不显示(hidden覆盖show)',
+      '修复再来一局血量不重置',
+      '血量调至1000,决策流程加保险'
+    ]],
     ['v208', [
       'AI双人血量调至1000,对局更持久',
       '决策流程加定时保险,不再依赖帧循环',
