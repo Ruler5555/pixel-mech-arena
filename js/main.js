@@ -1108,7 +1108,7 @@
       return;
     }
     game.setMode('aiHost');
-    game.maxHP = game.totalHpMax || 850; // [v212] 保险: rematch 后强制血量上限(与 setMode 单一数据源)
+    game.maxHP = game.totalHpMax || 750; // [v212] 保险: rematch 后强制血量上限(与 setMode 单一数据源)
     document.body.classList.add('ai-spectate'); // AI 观战: 隐藏触控操作键
     game.setAIPresets(hostPickId, clientPickId);
     roleP1.textContent = '你的AI';
@@ -1331,7 +1331,7 @@
       // client 收到: 双方风格下发, 开始观战对打
       if (myRole !== 'client' || roomMode !== 'ai') return;
       game.setMode('aiClient');
-      game.maxHP = game.totalHpMax || 850; // [v212] 保险: rematch 后强制血量上限(与 setMode 单一数据源)
+      game.maxHP = game.totalHpMax || 750; // [v212] 保险: rematch 后强制血量上限(与 setMode 单一数据源)
       document.body.classList.add('ai-spectate'); // AI 观战: 隐藏触控操作键
       game.setAIPresets(cfg.p1, cfg.p2);
       roleP1.textContent = '对手AI';
@@ -1403,6 +1403,9 @@
   // ===== 更新公告: 点击版本号显示近三次更新(倒序: 最新在前; 每条用短句概括改动, 一点一换行; 每次发版须 prepend 一条真实版本) =====
   // 文案规则: 每条不超过 30 字, 一条一个圆点, 折行不再出点(见 .cl-pt 悬挂缩进)
   const CHANGELOG = [
+    ['v216', [
+      'AI双人总血量调至750,节奏更紧凑'
+    ]],
     ['v215', [
       '修复药水回血被15%回血覆盖(现在20%+15%叠加)'
     ]],

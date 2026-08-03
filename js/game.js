@@ -263,9 +263,9 @@ class Game {
     // [v206] AI 双人对战新赛制(总血量生死战·一管血 800): 机甲血条本身就是 800 贯穿全场,
     //   伤害保持默认 1 倍(轻击 8/重击 18, 用户实测要求), 节奏=慢磨: 20s 回合掉 ~10%, 7 回合决生死。
     if (mode === MODES.AI_HOST || mode === MODES.AI_CLIENT) {
-      this.maxHP = 850;                            // 机甲血 = 总血池(贯穿, v212 用户调至 850)
+      this.maxHP = 750;                            // 机甲血 = 总血池(贯穿, v216 用户调至 750)
       this.roundTime = 30;
-      this.totalHpMax = 850;                       // 冗余: 决策/背水阈值参考
+      this.totalHpMax = 750;                       // 冗余: 决策/背水阈值参考
       this.dmgScale = 0.28;                        // 保留字段(模拟器参考, 实装不用)
       this.dmgMult = 1;                            // 伤害倍率 = 默认 1 倍(用户要求)
       this.healPct = 0.15;                         // 局间回血(本回合损失的 15%)
