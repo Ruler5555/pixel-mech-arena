@@ -15,7 +15,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" media="print" onload="this.media='all'">
 <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap"></noscript>
-<link rel="stylesheet" href="css/style.css?v=213">
+<link rel="stylesheet" href="css/style.css?v=214">
 </head>
 <body>
 <div id="app">
@@ -23,7 +23,7 @@
   <!-- ===== 全局常驻边缘: 规则 + 版本号(所有界面可见, 不滚动即可见) ===== -->
   <div id="persistEdge">
     <button id="rulesBtn" class="edge-btn" aria-label="游戏规则">规则?</button>
-    <span id="versionTag" class="version-tag">v213</span>
+    <span id="versionTag" class="version-tag">v214</span>
   </div>
 
   <!-- ===== 登录界面 ===== -->
@@ -256,11 +256,9 @@
         <div class="round-num" id="roundNum">1</div>
         <div class="timer" id="timer">60</div>
         <div class="net-status" id="netStatus">●</div>
-        <!-- [v206] AI 双人对战新赛制: 总血池贯穿 HUD(非 AI 模式隐藏) -->
+        <!-- [v206] AI 双人对战新赛制: 回合进度 HUD(非 AI 模式隐藏) -->
         <div class="total-hp" id="aiTotalHp" hidden></div>
       </div>
-      <!-- [v208] 诊断条: 独立一行, 不挤占中间列(否则两侧血条被压短) -->
-      <div class="ai-dbg" id="aiDbg" hidden></div>
       <div class="player-hud right">
         <div class="name"><span class="role" id="roleP2">AI</span> <span id="hudP2Name">RED-X</span></div>
         <div class="hp-bar"><div class="hp-fill red" id="hpP2"></div></div>
@@ -364,16 +362,16 @@
 </div>
 
 <!-- 所有脚本加 defer: 并行下载、按序执行、不阻塞首屏 DOM 解析; 加快首屏可点 -->
-<script defer src="vendor/peerjs.min.js?v=213"></script>
-<script defer src="vendor/mqtt.min.js?v=213"></script>
-<script defer src="js/auth.js?v=213"></script>
-<script defer src="js/world.js?v=213"></script>
-<script defer src="js/input.js?v=213"></script>
-<script defer src="js/touch.js?v=213"></script>
-<script defer src="js/sprite.js?v=213"></script>
-<script defer src="js/player.js?v=213"></script>
-<script defer src="js/net.js?v=213"></script>
-<script defer src="js/game.js?v=213"></script>
-<script defer src="js/main.js?v=213"></script>
+<script defer src="vendor/peerjs.min.js?v=214"></script>
+<script defer src="vendor/mqtt.min.js?v=214"></script>
+<script defer src="js/auth.js?v=214"></script>
+<script defer src="js/world.js?v=214"></script>
+<script defer src="js/input.js?v=214"></script>
+<script defer src="js/touch.js?v=214"></script>
+<script defer src="js/sprite.js?v=214"></script>
+<script defer src="js/player.js?v=214"></script>
+<script defer src="js/net.js?v=214"></script>
+<script defer src="js/game.js?v=214"></script>
+<script defer src="js/main.js?v=214"></script>
 </body>
 </html>

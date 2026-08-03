@@ -63,7 +63,6 @@
   const elAiTotalHp = document.getElementById('aiTotalHp');
   const elAiPreWarn = document.getElementById('aiPreWarn');
   const elAiReveal = document.getElementById('aiReveal');
-  const aiDbg = document.getElementById('aiDbg');
   const aiCardPanel = document.getElementById('aiCardPanel');
   const aiCardRow = document.getElementById('aiCardRow');
   const aiCardTimer = document.getElementById('aiCardTimer');
@@ -166,18 +165,6 @@
       elAiTotalHp.textContent = '回合 ' + game.round + '/' + game.maxRounds + sd;
     } else if (elAiTotalHp) {
       elAiTotalHp.hidden = true;
-    }
-    // [v208] 诊断条: 状态机实时显示(排障)
-    if (aiDbg) {
-      if (game.totalHpMax) {
-        aiDbg.hidden = false;
-        aiDbg.textContent = 'st=' + (game.state || '-') + ' d=' + aiDecisionState +
-          ' r=' + game.round + ' t=' + game.timer +
-          ' pane=' + (aiCardPanel.classList.contains('show') ? 1 : 0) +
-          ' act=' + (game.mode || '-');
-      } else {
-        aiDbg.hidden = true;
-      }
     }
     if (game.mode === 'offline') {
       elNet.textContent = ''; elNet.className = 'net-status';
@@ -1416,6 +1403,9 @@
   // ===== 更新公告: 点击版本号显示近三次更新(倒序: 最新在前; 每条用短句概括改动, 一点一换行; 每次发版须 prepend 一条真实版本) =====
   // 文案规则: 每条不超过 30 字, 一条一个圆点, 折行不再出点(见 .cl-pt 悬挂缩进)
   const CHANGELOG = [
+    ['v214', [
+      '移除对局状态诊断条(HUD恢复清爽)'
+    ]],
     ['v213', [
       '融合牌必出(不再看运气),药水血量门槛放宽至60%'
     ]],
