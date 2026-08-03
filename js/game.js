@@ -263,9 +263,9 @@ class Game {
     // [v206] AI 双人对战新赛制(总血量生死战·一管血 800): 机甲血条本身就是 800 贯穿全场,
     //   伤害保持默认 1 倍(轻击 8/重击 18, 用户实测要求), 节奏=慢磨: 20s 回合掉 ~10%, 7 回合决生死。
     if (mode === MODES.AI_HOST || mode === MODES.AI_CLIENT) {
-      this.maxHP = 1000;                           // 机甲血 = 总血池(贯穿, v208 用户调至 1000)
+      this.maxHP = 850;                            // 机甲血 = 总血池(贯穿, v212 用户调至 850)
       this.roundTime = 30;
-      this.totalHpMax = 1000;                      // 冗余: 决策/背水阈值参考
+      this.totalHpMax = 850;                       // 冗余: 决策/背水阈值参考
       this.dmgScale = 0.28;                        // 保留字段(模拟器参考, 实装不用)
       this.dmgMult = 1;                            // 伤害倍率 = 默认 1 倍(用户要求)
       this.healPct = 0.15;                         // 局间回血(本回合损失的 15%)
@@ -311,7 +311,7 @@ class Game {
       this.suddenDeathRound = false;
       this.cardState = {
         fused: false, fuseSub: null, sigN: 0, atkN: 0, defN: 0,
-        potion: false, atkLeft: 0, atkVal: 1, defLeft: 0, defVal: 1,
+        potion: false, potionN: 0, potionN2: 0, atkLeft: 0, atkVal: 1, defLeft: 0, defVal: 1,
         fused2: false, fuseSub2: null, sigN2: 0, atkN2: 0, defN2: 0,
         potion2: false, atkLeft2: 0, atkVal2: 1, defLeft2: 0, defVal2: 1
       };
@@ -417,8 +417,8 @@ class Game {
   // 该侧当前可用牌池(每局间出 2-3 张选 1)
   _cardAvail(side) {
     const cs = this.cardState;
-    const S = side === 1 ? { fused: cs.fused, sigN: cs.sigN, atkN: cs.atkN, defN: cs.defN, potion: cs.potion, sigN2: 0 }
-                         : { fused: cs.fused2, sigN: cs.sigN2, atkN: cs.atkN2, defN: cs.defN2, potion: cs.potion2, sigN2: 0 };
+    const S = side === 1 ? { fused: cs.fused, sigN: cs.sigN, atkN: cs.atkN, defN: cs.defN, potionN: cs.potionN, sigN2: 0 }
+                         : { fused: cs.fused2, sigN: cs.sigN2, atkN: cs.atkN2, defN: cs.defN2, potionN: cs.potionN2, sigN2: 0 };
     const myHp = side === 1 ? this.p1.hp : this.p2.hp;
     const foeHp = side === 1 ? this.p2.hp : this.p1.hp;
     const behind = foeHp - myHp;
@@ -429,7 +429,8 @@ class Game {
     if (S.sigN < 2) avail.push('sig');
     if (S.atkN < 2) avail.push('atk');
     if (S.defN < 2) avail.push('def');
-    if (!S.potion && myHp < 0.4 * this.totalHpMax) avail.push('potion');
+    // [v212] 药水: 每场最多 2 次 + 血量<40% 才出现(即时回血 20%)
+    if ((S.potionN || 0) < 2 && myHp < 0.4 * this.totalHpMax) avail.push('potion');
     return avail;
   }
   // 局间决策 payload(main.js 显示 UI 用)
@@ -481,7 +482,13 @@ class Game {
       const v = 1 - 0.06 * (n >= 2 ? 0.5 : 1); // 强化防 承伤−6%, 第二次减半
       if (s) { cs.defVal = v; cs.defLeft = 2; } else { cs.defVal2 = v; cs.defLeft2 = 2; }
     } else if (pick === 'potion') {
-      if (s) cs.potion = true; else cs.potion2 = true; // 下次回合结束结算时回血 +30%
+      // [v212] 药水改即时回血: 选完立刻回 20% 最大血(用户实测"选了没生效"——
+      //   原实现是"下回合结算时回血比例+30%", 依赖下回合掉血且结算公式难感知)
+      const heal = Math.round(this.maxHP * 0.20);
+      if (s) { cs.potionN = (cs.potionN || 0) + 1; this.p1.hp = Math.min(this.maxHP, this.p1.hp + heal); }
+      else   { cs.potionN2 = (cs.potionN2 || 0) + 1; this.p2.hp = Math.min(this.maxHP, this.p2.hp + heal); }
+      // 药水回血也要同步观战端: 记入 roundStartHp 会导致结算双算, 直接置"本回合已消耗标记"由 state 广播
+      this._potionFlash = (this._potionFlash || 0) + 1; // 触发揭晓条附注(仅权威端)
     }
   }
   _finishDecision() {
@@ -595,7 +602,8 @@ class Game {
       this.timerAcc += dt;
       if (this.timerAcc >= 1) { this.timerAcc -= 1; this.timer = Math.max(0, this.timer - 1); }
       // [v206] 5s 预警: 回合结束前 5s 触发一次(通知 main.js 显示"即将进入决策")
-      if (this.mode === MODES.AI_HOST && this.totalHpMax && !this.preWarned && this.timer <= 5) {
+      // [v212] 最后一回合(round>=maxRounds)不预警: 打完直接结算, 不再进选牌
+      if (this.mode === MODES.AI_HOST && this.totalHpMax && !this.preWarned && this.timer <= 5 && this.round < this.maxRounds) {
         this.preWarned = true;
         if (this.onPreDecision) this.onPreDecision();
       }

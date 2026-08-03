@@ -154,6 +154,9 @@
     if (elHpNumP2) { elHpNumP2.textContent = hpNum2; if (hpNum2 !== prevHpNum2) { pulseHp(elHpNumP2); prevHpNum2 = hpNum2; } }
     elWinsP1.innerHTML = fmtWins(game.winsP1);
     elWinsP2.innerHTML = fmtWins(game.winsP2);
+    // [v212] AI 一管血模式无 BO3 回合胜利概念: 隐藏胜利点(仅 PvP/单人显示)
+    if (game.totalHpMax) { elWinsP1.hidden = true; elWinsP2.hidden = true; }
+    else { elWinsP1.hidden = false; elWinsP2.hidden = false; }
     elRound.textContent = game.round;
     elTimer.textContent = game.timer;
     // [v206] AI 新赛制: 机甲血条即 800 贯穿(自然显示), HUD 补充回合进度/骤死标记
@@ -198,7 +201,7 @@
     sig:    { emoji: '⭐', name: '招牌牌',   eff: '深化本流派打法\n持续2回合', left: '每场2次' },
     atk:    { emoji: '⚔️', name: '强化·攻', eff: '攻击+8%\n持续2回合', left: '第2次减半' },
     def:    { emoji: '🛡️', name: '强化·防', eff: '承伤-6%\n持续2回合', left: '第2次减半' },
-    potion: { emoji: '🧪', name: '恢复药水', eff: '下回合结算回血+30%', left: '血量<40%出现' },
+    potion: { emoji: '🧪', name: '恢复药水', eff: '立即恢复20%血量', left: '每场2次·血量<40%出现' },
     skip:   { emoji: '⏭️', name: '跳过',    eff: '不选任何牌', left: '' }
   };
   // 绑定 game 决策回调(host 权威跑, client 由 intermission 消息驱动)
@@ -264,10 +267,21 @@
       const meta = CARD_META[c] || CARD_META.skip;
       const card = document.createElement('div');
       card.className = 'ai-card';
+      // [v212] 融合牌动态显示推荐副风格名(消除"融哪个?"困惑; 机制=主70%+副30%插值)
+      let left = meta.left;
+      if (c === 'fuse' && game && game._fuseRecommend) {
+        try {
+          const foe = mySide === 1 ? (game.aiPresetP2 ? game.aiPresetP2.id : 'balanced')
+                                   : (game.aiPresetP1 ? game.aiPresetP1.id : 'balanced');
+          const sub = game._fuseRecommend(foe);
+          const subName = (typeof AI_PRESETS !== 'undefined' && AI_PRESETS[sub]) ? AI_PRESETS[sub].name : sub;
+          left = '推荐副风格: ' + subName;
+        } catch (e) {}
+      }
       card.innerHTML = '<span class="ac-emoji">' + meta.emoji + '</span>' +
         '<span class="ac-name">' + meta.name + '</span>' +
         '<span class="ac-eff">' + meta.eff.replace(/\n/g, '<br>') + '</span>' +
-        '<span class="ac-left">' + meta.left + '</span>';
+        '<span class="ac-left">' + left + '</span>';
       card.addEventListener('click', () => pickCard(c));
       aiCardRow.appendChild(card);
     });
@@ -1107,7 +1121,7 @@
       return;
     }
     game.setMode('aiHost');
-    game.maxHP = 1000; // [v209] 保险: rematch 后再开局强制血量上限 1000
+    game.maxHP = game.totalHpMax || 850; // [v212] 保险: rematch 后强制血量上限(与 setMode 单一数据源)
     document.body.classList.add('ai-spectate'); // AI 观战: 隐藏触控操作键
     game.setAIPresets(hostPickId, clientPickId);
     roleP1.textContent = '你的AI';
@@ -1330,7 +1344,7 @@
       // client 收到: 双方风格下发, 开始观战对打
       if (myRole !== 'client' || roomMode !== 'ai') return;
       game.setMode('aiClient');
-      game.maxHP = 1000; // [v209] 保险: rematch 后再开局强制血量上限 1000
+      game.maxHP = game.totalHpMax || 850; // [v212] 保险: rematch 后强制血量上限(与 setMode 单一数据源)
       document.body.classList.add('ai-spectate'); // AI 观战: 隐藏触控操作键
       game.setAIPresets(cfg.p1, cfg.p2);
       roleP1.textContent = '对手AI';
@@ -1402,6 +1416,12 @@
   // ===== 更新公告: 点击版本号显示近三次更新(倒序: 最新在前; 每条用短句概括改动, 一点一换行; 每次发版须 prepend 一条真实版本) =====
   // 文案规则: 每条不超过 30 字, 一条一个圆点, 折行不再出点(见 .cl-pt 悬挂缩进)
   const CHANGELOG = [
+    ['v212', [
+      'AI双人总血量调至850,节奏更快',
+      '药水改立即回血20%(原下回合结算失效)',
+      '第7回合不再弹选牌,直接决胜',
+      '融合牌显示推荐副风格,血条加长'
+    ]],
     ['v211', [
       '修复再来一局血量不重置(残留携带血量)',
       'aistart补发防丢+观战缓冲新局清空'
