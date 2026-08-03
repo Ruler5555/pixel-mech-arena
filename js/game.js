@@ -260,12 +260,14 @@ class Game {
     this.mode = mode;
     this.localPlayer = (mode === MODES.CLIENT || mode === MODES.AI_CLIENT) ? 2 : 1;
     // [v141] 联机 AI 对战模式专属数值: 血量上限 120、每回合 30s; 其余模式维持 100/60
-    // [v206] AI 双人对战新赛制(总血量生死战): 战斗内 120 血物理不变 + 总血池 800 贯穿
+    // [v206] AI 双人对战新赛制(总血量生死战·一管血 800): 机甲血条本身就是 800 贯穿全场,
+    //   伤害倍率 ×(800/120×0.28≈1.87) 等效模拟器 loss×800×0.28; 局间只回血 15% 不清空。
     if (mode === MODES.AI_HOST || mode === MODES.AI_CLIENT) {
-      this.maxHP = 120;
+      this.maxHP = 800;                            // 机甲血 = 总血池(贯穿)
       this.roundTime = 30;
-      this.totalHpMax = 800;                       // 总血池(跨回合贯穿)
-      this.dmgScale = 0.28;                        // 掉血比例 → 总池消耗缩放
+      this.totalHpMax = 800;                       // 冗余: 决策/背水阈值参考
+      this.dmgScale = 0.28;                        // 模拟器缩放(换算成战斗倍率: ×800/120)
+      this.dmgMult = (800 / 120) * 0.28;           // 实装战斗伤害倍率 ≈1.8667
       this.healPct = 0.15;                         // 局间回血(本回合损失的 15%)
       this.roundTimes = [20, 25, 30, 30, 30, 30, 30]; // 前紧后松
       this.maxRounds = 7;
@@ -274,6 +276,7 @@ class Game {
       this.roundTime = 60;
       this.totalHpMax = null;
       this.dmgScale = 1;
+      this.dmgMult = 1;
       this.healPct = 0;
       this.roundTimes = null;
       this.maxRounds = 3;
@@ -300,11 +303,10 @@ class Game {
     this.winsP1 = 0;
     this.winsP2 = 0;
     this._lastStateFrame = 0; // 新对局重置快照序号(允许主机重启后的小 frame)
-    // [v206] 新赛制: 重置总血池 + 牌库状态(双侧) + 骤死标记
+    // [v206] 新赛制: 重置牌库状态(双侧) + 骤死标记(机甲血由 _resetMechs 满血初始化)
     if (this.totalHpMax) {
-      this.totalHp1 = this.totalHpMax;
-      this.totalHp2 = this.totalHpMax;
       this.suddenDeath = false;
+      this.suddenDeathRound = false;
       this.cardState = {
         fused: false, fuseSub: null, sigN: 0, atkN: 0, defN: 0,
         potion: false, atkLeft: 0, atkVal: 1, defLeft: 0, defVal: 1,
@@ -316,6 +318,8 @@ class Game {
       this.flank1 = false; this.flank2 = false;
       this.preWarned = false;
       this.awaitingDecision = false;
+      this.decisionPicks = null;
+      this.decisionDone = 0;
     }
     this.startRound();
   }
@@ -324,6 +328,14 @@ class Game {
     this._resetMechs();
     this.interp.buffer.length = 0;
     this.interp.prevFoeHp = undefined;
+    // [v206] 一管血 800: 局间不清空, 恢复上回合剩余血量(回血已在回合结算时完成)
+    if (this.mode === MODES.AI_HOST && this.totalHpMax) {
+      if (this._carryHp1 !== undefined) { this.p1.hp = Math.min(this.maxHP, Math.max(0, this._carryHp1)); }
+      if (this._carryHp2 !== undefined) { this.p2.hp = Math.min(this.maxHP, Math.max(0, this._carryHp2)); }
+    }
+    // 记录本回合起始血(回合结束结算回血用)
+    this._roundStartHp1 = this.p1.hp;
+    this._roundStartHp2 = this.p2.hp;
     // [v206] 回合时长序列(前紧后松); 骤死加时用 30s
     this.timer = (this.roundTimes && this.roundTimes[this.round - 1]) || (this.suddenDeath ? 30 : this.roundTime);
     this.timerAcc = 0;
@@ -340,9 +352,9 @@ class Game {
       // 绕后掷骰: 机动流(疾风/游击)绕后克铁壁 [PLACEHOLDER] 草案
       this.flank1 = this._rollFlank(this.aiPresetP1 ? this.aiPresetP1.id : null);
       this.flank2 = this._rollFlank(this.aiPresetP2 ? this.aiPresetP2.id : null);
-      // 背水被动(方案b): 总血落后>20% 自动下回合攻击×(1+30%) [PLACEHOLDER]
-      if (this.totalHp2 - this.totalHp1 > 0.2 * this.totalHpMax) this.atkMul1 = Math.max(this.atkMul1, 1.30);
-      if (this.totalHp1 - this.totalHp2 > 0.2 * this.totalHpMax) this.atkMul2 = Math.max(this.atkMul2, 1.30);
+      // 背水被动(方案b): 机甲血落后>20% 自动下回合攻击×(1+30%) [PLACEHOLDER]
+      if (this.p2.hp - this.p1.hp > 0.2 * this.totalHpMax) this.atkMul1 = Math.max(this.atkMul1, 1.30);
+      if (this.p1.hp - this.p2.hp > 0.2 * this.totalHpMax) this.atkMul2 = Math.max(this.atkMul2, 1.30);
     }
     this.setState(STATES.READY);
   }
@@ -391,8 +403,8 @@ class Game {
     const cs = this.cardState;
     const S = side === 1 ? { fused: cs.fused, sigN: cs.sigN, atkN: cs.atkN, defN: cs.defN, potion: cs.potion, sigN2: 0 }
                          : { fused: cs.fused2, sigN: cs.sigN2, atkN: cs.atkN2, defN: cs.defN2, potion: cs.potion2, sigN2: 0 };
-    const myHp = side === 1 ? this.totalHp1 : this.totalHp2;
-    const foeHp = side === 1 ? this.totalHp2 : this.totalHp1;
+    const myHp = side === 1 ? this.p1.hp : this.p2.hp;
+    const foeHp = side === 1 ? this.p2.hp : this.p1.hp;
     const behind = foeHp - myHp;
     const avail = [];
     // 融合刷出(GDD 3.3): 局间1 落后必出/领先50%, 最迟局间2 保底
@@ -408,8 +420,8 @@ class Game {
   _decisionPayload() {
     return {
       round: this.round,
-      hp1: Math.max(0, Math.round(this.totalHp1)),
-      hp2: Math.max(0, Math.round(this.totalHp2)),
+      hp1: Math.max(0, Math.round(this.p1.hp)),
+      hp2: Math.max(0, Math.round(this.p2.hp)),
       maxHp: this.totalHpMax,
       avail1: this._cardAvail(1),
       avail2: this._cardAvail(2)
@@ -598,30 +610,28 @@ class Game {
       const p2Dead = this.p2.state === 'ko' || this.p2.hp <= 0;
       if (p1Dead || p2Dead || this.timer <= 0) {
         if (this.mode === MODES.AI_HOST && this.totalHpMax) {
-          // ===== [v206] AI 双人对战新赛制: 总血池结算(与模拟器 loss 映射同构) =====
-          // 本回合双方掉血比例 → 扣总血池(×dmgScale) → 局间回血(healPct, 药水提升至 +30%)
-          const loss1 = Math.max(0, (this.maxHP - Math.max(0, this.p1.hp)) / this.maxHP);
-          const loss2 = Math.max(0, (this.maxHP - Math.max(0, this.p2.hp)) / this.maxHP);
+          // ===== [v206] AI 双人对战新赛制: 一管血 800(机甲血即总血, 局间回血不清空) =====
+          // 回血 = 本回合损失 × (healPct + 药水30%); 打空即输; 满7回合比残量; 同血骤死
+          const loss1 = Math.max(0, this._roundStartHp1 - Math.max(0, this.p1.hp));
+          const loss2 = Math.max(0, this._roundStartHp2 - Math.max(0, this.p2.hp));
           const cs = this.cardState;
           const healEff1 = this.healPct + (cs.potion ? 0.30 : 0);
           const healEff2 = this.healPct + (cs.potion2 ? 0.30 : 0);
           if (cs.potion) cs.potion = false;
           if (cs.potion2) cs.potion2 = false;
-          const consume1 = loss1 * this.totalHpMax * this.dmgScale * (1 - healEff1);
-          const consume2 = loss2 * this.totalHpMax * this.dmgScale * (1 - healEff2);
-          this.totalHp1 = Math.max(0, this.totalHp1 - consume1);
-          this.totalHp2 = Math.max(0, this.totalHp2 - consume2);
+          this._carryHp1 = Math.min(this.maxHP, Math.max(0, this.p1.hp) + loss1 * healEff1);
+          this._carryHp2 = Math.min(this.maxHP, Math.max(0, this.p2.hp) + loss2 * healEff2);
           this.roundWinner = 0;
           // 胜负判定: 打空即输 → 满 7 回合比残量 → 同血骤死加时
-          if (this.totalHp1 <= 0 && this.totalHp2 > 0) { this.roundWinner = 2; this.setState(STATES.MATCH_END); }
-          else if (this.totalHp2 <= 0 && this.totalHp1 > 0) { this.roundWinner = 1; this.setState(STATES.MATCH_END); }
-          else if (this.totalHp1 <= 0 && this.totalHp2 <= 0) {
-            this.roundWinner = this.totalHp1 >= this.totalHp2 ? 1 : 2; // 同时打空取残量高者
+          if (this._carryHp1 <= 0 && this._carryHp2 > 0) { this.roundWinner = 2; this.setState(STATES.MATCH_END); }
+          else if (this._carryHp2 <= 0 && this._carryHp1 > 0) { this.roundWinner = 1; this.setState(STATES.MATCH_END); }
+          else if (this._carryHp1 <= 0 && this._carryHp2 <= 0) {
+            this.roundWinner = this._carryHp1 >= this._carryHp2 ? 1 : 2; // 同时打空取残量高者
             this.setState(STATES.MATCH_END);
           }
           else if (this.round >= this.maxRounds) {
-            if (this.totalHp1 > this.totalHp2) { this.roundWinner = 1; this.setState(STATES.MATCH_END); }
-            else if (this.totalHp2 > this.totalHp1) { this.roundWinner = 2; this.setState(STATES.MATCH_END); }
+            if (this._carryHp1 > this._carryHp2) { this.roundWinner = 1; this.setState(STATES.MATCH_END); }
+            else if (this._carryHp2 > this._carryHp1) { this.roundWinner = 2; this.setState(STATES.MATCH_END); }
             else { this.suddenDeath = true; this.setState(STATES.ROUND_END); } // 同血 → 骤死
           }
           else this.setState(STATES.ROUND_END); // 正常进入结算 + 局间决策
@@ -725,10 +735,10 @@ class Game {
       shake: this.shake,
       frame: this.frame
     };
-    // [v206] 新赛制: 总血池/骤死标记(观战端 HUD 显示)
+    // [v206] 新赛制: 机甲血即总血(贯穿) + 骤死标记(观战端 HUD 显示)
     if (this.totalHpMax) {
-      s.th1 = Math.max(0, Math.round(this.totalHp1));
-      s.th2 = Math.max(0, Math.round(this.totalHp2));
+      s.th1 = Math.max(0, Math.round(this.p1.hp));
+      s.th2 = Math.max(0, Math.round(this.p2.hp));
       s.thMax = this.totalHpMax;
       s.sd = this.suddenDeath || this.suddenDeathRound;
       s.dt = this.decisionTimer;
@@ -1068,10 +1078,11 @@ class Game {
     const hb = attacker.attackHitbox();
     const bb = defender.bodyBox();
     if (aabb(hb, bb)) {
-      // [v206] AI 模式: 牌效果乘数(强化攻/防, 覆盖逻辑与模拟器一致)
+      // [v206] AI 模式: 一管血 800 基础伤害倍率 ×(牌效果: 强化攻/防, 覆盖逻辑与模拟器一致)
       let dmgMul = 1;
       if (this.mode === MODES.AI_HOST && this.totalHpMax) {
-        dmgMul = (attacker === this.p1 ? this.atkMul1 : this.atkMul2)
+        dmgMul = (this.dmgMult || 1)
+               * (attacker === this.p1 ? this.atkMul1 : this.atkMul2)
                * (defender === this.p1 ? this.defMul1 : this.defMul2);
       }
       // [v206] 绕后: 攻击方机动流(疾风/游击)绕后状态 && 防御方铁壁 → 背刺无视防御

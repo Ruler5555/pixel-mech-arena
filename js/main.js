@@ -155,13 +155,11 @@
     elWinsP2.innerHTML = fmtWins(game.winsP2);
     elRound.textContent = game.round;
     elTimer.textContent = game.timer;
-    // [v206] AI 新赛制: 总血池贯穿 HUD(800 血条, 跨回合连续可见)
+    // [v206] AI 新赛制: 机甲血条即 800 贯穿(自然显示), HUD 补充回合进度/骤死标记
     if (game.totalHpMax && elAiTotalHp) {
       elAiTotalHp.hidden = false;
-      const h1 = Math.max(0, Math.round(game.totalHp1 || 0));
-      const h2 = Math.max(0, Math.round(game.totalHp2 || 0));
       const sd = game.suddenDeath || game.suddenDeathRound ? ' ⚔️骤死' : '';
-      elAiTotalHp.textContent = '总血 ' + h1 + '/' + game.totalHpMax + ' vs ' + h2 + '/' + game.totalHpMax + sd;
+      elAiTotalHp.textContent = '回合 ' + game.round + '/' + game.maxRounds + sd;
     } else if (elAiTotalHp) {
       elAiTotalHp.hidden = true;
     }
@@ -188,6 +186,7 @@
   // 绑定 game 决策回调(host 权威跑, client 由 intermission 消息驱动)
   game.onPreDecision = () => {
     if (elAiPreWarn) { elAiPreWarn.classList.remove('hidden'); elAiPreWarn.textContent = '⚡ 即将进入决策 5'; }
+    if (game.mode === 'aiHost') Net.sendInterWarn(); // [v206] 同步 5s 预警给 client
   };
   game.onDecision = (payload) => {
     if (elAiPreWarn) elAiPreWarn.classList.add('hidden');
@@ -195,9 +194,12 @@
     aiDecisionState = 'pending';
     aiLocalPick = null;
     if (game.mode === 'aiHost') {
-      // host 侧: 本地显示(自己为 side 1) + 发 intermission 给 client(带 client 侧牌池)
+      // host 侧: 本地显示(自己为 side 1) + 发 intermission 给 client(补发 3 次防丢: 控制消息走 unreliable 通道)
       showCardPanel(payload, 1);
-      Net.sendIntermission(payload);
+      const send = () => { if (game.state === 'decision') Net.sendIntermission(payload); };
+      send();
+      setTimeout(send, 600);
+      setTimeout(send, 1500);
     }
   };
   game.onReveal = (picks) => {
@@ -297,7 +299,11 @@
     clearTimeout(elAiReveal._t);
     elAiReveal._t = setTimeout(() => elAiReveal.classList.add('hidden'), 2400);
   }
-  // client 侧: 收到 host intermission(进决策) / intergo(继续)
+  // client 侧: 收到 host intermission(进决策) / intergo(继续) / interwarn(5s 预警)
+  Net.on('interwarn', () => {
+    if (game.mode !== 'aiClient') return;
+    if (elAiPreWarn) { elAiPreWarn.classList.remove('hidden'); elAiPreWarn.textContent = '⚡ 即将进入决策'; }
+  });
   Net.on('intermission', (payload) => {
     if (game.mode !== 'aiClient') return;
     if (elAiPreWarn) elAiPreWarn.classList.add('hidden');
@@ -1349,6 +1355,11 @@
   // ===== 更新公告: 点击版本号显示近三次更新(倒序: 最新在前; 每条用短句概括改动, 一点一换行; 每次发版须 prepend 一条真实版本) =====
   // 文案规则: 每条不超过 30 字, 一条一个圆点, 折行不再出点(见 .cl-pt 悬挂缩进)
   const CHANGELOG = [
+    ['v206', [
+      'AI双人改一管血800贯穿,局间只回血15%',
+      '修复选牌弹出:决策消息补发防丢',
+      '客户端同步5秒决策预警提示'
+    ]],
     ['v205', [
       'AI双人新赛制:总血量800贯穿7回合,回血15%',
       '局间定格选牌:融合/招牌牌/强化/药水10秒决策',

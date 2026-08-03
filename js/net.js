@@ -75,7 +75,7 @@ const Net = (() => {
     reset: [], rematchReady: [],
     aimode: [], aipick: [], aipickack: [], aistart: [], aipickstart: [], aicancel: [],
     // [v206] AI 新赛制·局间决策消息(低频控制消息, 与 aipick 系同模式)
-    intermission: [], interpick: [], interpickack: [], intergo: [],
+    intermission: [], interpick: [], interpickack: [], intergo: [], interwarn: [],
   };
   function on(ev, fn) { (handlers[ev] || []).push(fn); }
   function emit(ev, arg) { (handlers[ev] || []).forEach(fn => { try { fn(arg); } catch (e) {} }); }
@@ -369,6 +369,7 @@ const Net = (() => {
     else if (msg.t === 'interpick') emit('interpick', msg);           // client→host: 选牌(带 ack 重发)
     else if (msg.t === 'interpickack') { emit('interpickack'); stopInterPickRetry(); }  // host 已收到, client 停止重发
     else if (msg.t === 'intergo') emit('intergo', msg.p);             // host→client: 揭晓+继续
+    else if (msg.t === 'interwarn') emit('interwarn');              // host→client: 5s 预警
     else if (msg.t === 'ping') send({ t: 'pong', ts: msg.ts });
     else if (msg.t === 'pong') { const r = Date.now() - (msg.ts || 0); if (r >= 0 && r < 10000) rtt = r; }
   }
@@ -440,7 +441,7 @@ const Net = (() => {
   //   - 低频控制消息(start/reset/rmt/bye/aimode/aipick/aipickack/aistart/aips/aicxl + [v206] intermission/interpick/interpickack/intergo):
   //     双通道冗余(P2P + MQTT 兜底), 保证选风格确认/开战等关键流程可靠送达(v174 确认机制的上层保险)
   const CTRL_TYPES = ['start','reset','rmt','bye','aimode','aipick','aipickack','aistart','aips','aicxl',
-                      'intermission','interpick','interpickack','intergo'];
+                      'intermission','interpick','interpickack','intergo','interwarn'];
   function send(obj) {
     obj.q = ++sendSeq;
     if (conn && conn.open) { try { conn.send(obj); } catch (e) {} }
@@ -495,6 +496,7 @@ const Net = (() => {
   }
   function sendInterPickAck() { send({ t: 'interpickack' }); } // host 回执, client 停止重发
   function sendInterGo(picks) { send({ t: 'intergo', p: picks }); }
+  function sendInterWarn() { send({ t: 'interwarn' }); } // [v206] 5s 预警(host→client)
   // host 收到 interpickack 后 client 停止重发(由 main.js 的 interpickack 事件触发调用)
   function stopInterPickRetry() { clearInterval(_interPickTimer); _interPickTimer = null; }
 
@@ -538,7 +540,7 @@ const Net = (() => {
     sendState, sendInput, sendReset, sendBye, sendStart, sendRematchReady,
     sendAiMode, sendAiPick, sendAiPickAck, sendAiStart, sendAiPickStart, sendAiCancel,
     // [v206] AI 新赛制·局间决策消息
-    sendIntermission, sendInterPick, sendInterPickAck, sendInterGo, stopInterPickRetry,
+    sendIntermission, sendInterPick, sendInterPickAck, sendInterGo, sendInterWarn, stopInterPickRetry,
     setName, getRole, isConnected, isP2PReady, getRoomCode, getMode, getRtt, getStateChannel, getChannelDetail, close
   };
 })();
