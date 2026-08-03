@@ -423,14 +423,14 @@ class Game {
     const foeHp = side === 1 ? this.p2.hp : this.p1.hp;
     const behind = foeHp - myHp;
     const avail = [];
-    // 融合刷出(GDD 3.3): 局间1 落后必出/领先50%, 最迟局间2 保底
-    const fuseAvail = !S.fused && (this.round === 1 ? (behind > 0 ? true : Math.random() < 0.5) : true);
+    // [v213] 融合: 未融合就必出(去掉"局间1领先50%"随机——短对局中整局不见, 用户实测困惑)
+    const fuseAvail = !S.fused;
     if (fuseAvail) avail.push('fuse');
     if (S.sigN < 2) avail.push('sig');
     if (S.atkN < 2) avail.push('atk');
     if (S.defN < 2) avail.push('def');
-    // [v212] 药水: 每场最多 2 次 + 血量<40% 才出现(即时回血 20%)
-    if ((S.potionN || 0) < 2 && myHp < 0.4 * this.totalHpMax) avail.push('potion');
+    // [v213] 药水: 血量<60% 出现(v212 是 40%, AI 对局大部分时间血量更高 → 整局见不到)
+    if ((S.potionN || 0) < 2 && myHp < 0.6 * this.totalHpMax) avail.push('potion');
     return avail;
   }
   // 局间决策 payload(main.js 显示 UI 用)
