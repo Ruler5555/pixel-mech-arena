@@ -15,7 +15,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" media="print" onload="this.media='all'">
 <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap"></noscript>
-<link rel="stylesheet" href="css/style.css?v=204">
+<link rel="stylesheet" href="css/style.css?v=205">
 </head>
 <body>
 <div id="app">
@@ -23,7 +23,7 @@
   <!-- ===== 全局常驻边缘: 规则 + 版本号(所有界面可见, 不滚动即可见) ===== -->
   <div id="persistEdge">
     <button id="rulesBtn" class="edge-btn" aria-label="游戏规则">规则?</button>
-    <span id="versionTag" class="version-tag">v204</span>
+    <span id="versionTag" class="version-tag">v205</span>
   </div>
 
   <!-- ===== 登录界面 ===== -->
@@ -256,6 +256,8 @@
         <div class="round-num" id="roundNum">1</div>
         <div class="timer" id="timer">60</div>
         <div class="net-status" id="netStatus">●</div>
+        <!-- [v206] AI 双人对战新赛制: 总血池贯穿 HUD(非 AI 模式隐藏) -->
+        <div class="total-hp" id="aiTotalHp" hidden></div>
       </div>
       <div class="player-hud right">
         <div class="name"><span class="role" id="roleP2">AI</span> <span id="hudP2Name">RED-X</span></div>
@@ -267,6 +269,9 @@
 
     <div class="stage-wrap">
       <canvas id="game" width="640" height="360"></canvas>
+      <!-- [v206] AI 新赛制 UI: 5s 预警 + 局间决策揭晓条 -->
+      <div id="aiPreWarn" class="ai-pre-warn hidden">⚡ 即将进入决策</div>
+      <div id="aiReveal" class="ai-reveal hidden"></div>
       <div id="overlay" class="overlay hidden">
         <div class="overlay-box">
           <h2 id="overlayTitle">READY?</h2>
@@ -274,6 +279,19 @@
           <button id="startBtn">开始对战</button>
           <button id="cancelBtn" class="cancel-btn hidden">返回大厅</button>
         </div>
+      </div>
+    </div>
+
+    <!-- [v206] AI 新赛制: 局间决策牌组(覆盖触控区, 画面定格时显示) -->
+    <div id="aiCardPanel" class="ai-card-panel hidden">
+      <div class="ai-card-head">
+        <span class="ai-card-title">回合间决策</span>
+        <span class="ai-card-timer" id="aiCardTimer">10s</span>
+      </div>
+      <div class="ai-card-row" id="aiCardRow"></div>
+      <div class="ai-card-foot">
+        <button id="aiCardSkip" class="ai-card-skip">跳过（不选）</button>
+        <span class="ai-card-status" id="aiCardStatus">秘密选择中…</span>
       </div>
     </div>
 
@@ -309,13 +327,16 @@
     <div class="info-card">
       <div class="info-title">游戏规则</div>
       <div class="info-body">
-        <p>· 三局两胜(BO3),每回合 60 秒(联机 AI 双人对战为 30 秒),时间到比血量,高者胜;同血平局</p>
-        <p>· 血量上限 100(联机 AI 双人对战为 120),显示在各自血条下方,受击后实时更新</p>
+        <p>· 三局两胜(BO3),每回合 60 秒,时间到比血量,高者胜;同血平局</p>
+        <p>· 血量上限 100,显示在各自血条下方,受击后实时更新</p>
         <p>· 轻击:伤害 8,出手快后摇短;重击:伤害 18,出手慢,破防惩罚强</p>
         <p>· 防御:减伤 90% 并反弹 60% 伤害给攻击者,但防御时不能移动</p>
         <p>· 二段跳可空中走位,但空中不能攻击</p>
         <p>· 键盘: A/D 移动 · W 跳 · J 轻击 · K 重击 · L 防御</p>
         <p>· 移动端: 左下方向滑杆,右下 轻击/重击/防御/跳跃</p>
+        <p class="rules-ai">🤖 AI 双人对战·教练模式:总血量 800 贯穿全场(每回合结束回血 15%),最多 7 回合(20/25/30s 递增),打空即输,同血骤死加时</p>
+        <p class="rules-ai">· 每回合结束画面定格,从下半屏牌组选 1 张(10 秒):融合/招牌牌/强化攻防/药水;落后 >20% 自动获背水加成</p>
+        <p class="rules-ai">· 机动流(疾风/游击)可绕后偷袭铁壁:背刺无视防御</p>
       </div>
       <button class="info-close" data-close="rulesPop">知道了</button>
     </div>
@@ -341,16 +362,16 @@
 </div>
 
 <!-- 所有脚本加 defer: 并行下载、按序执行、不阻塞首屏 DOM 解析; 加快首屏可点 -->
-<script defer src="vendor/peerjs.min.js?v=204"></script>
-<script defer src="vendor/mqtt.min.js?v=204"></script>
-<script defer src="js/auth.js?v=204"></script>
-<script defer src="js/world.js?v=204"></script>
-<script defer src="js/input.js?v=204"></script>
-<script defer src="js/touch.js?v=204"></script>
-<script defer src="js/sprite.js?v=204"></script>
-<script defer src="js/player.js?v=204"></script>
-<script defer src="js/net.js?v=204"></script>
-<script defer src="js/game.js?v=204"></script>
-<script defer src="js/main.js?v=204"></script>
+<script defer src="vendor/peerjs.min.js?v=205"></script>
+<script defer src="vendor/mqtt.min.js?v=205"></script>
+<script defer src="js/auth.js?v=205"></script>
+<script defer src="js/world.js?v=205"></script>
+<script defer src="js/input.js?v=205"></script>
+<script defer src="js/touch.js?v=205"></script>
+<script defer src="js/sprite.js?v=205"></script>
+<script defer src="js/player.js?v=205"></script>
+<script defer src="js/net.js?v=205"></script>
+<script defer src="js/game.js?v=205"></script>
+<script defer src="js/main.js?v=205"></script>
 </body>
 </html>

@@ -74,7 +74,8 @@ const Net = (() => {
     progress: [], error: [], start: [],
     reset: [], rematchReady: [],
     aimode: [], aipick: [], aipickack: [], aistart: [], aipickstart: [], aicancel: [],
-
+    // [v206] AI 新赛制·局间决策消息(低频控制消息, 与 aipick 系同模式)
+    intermission: [], interpick: [], interpickack: [], intergo: [],
   };
   function on(ev, fn) { (handlers[ev] || []).push(fn); }
   function emit(ev, arg) { (handlers[ev] || []).forEach(fn => { try { fn(arg); } catch (e) {} }); }
@@ -363,6 +364,11 @@ const Net = (() => {
     else if (msg.t === 'aistart') emit('aistart', msg.cfg);
     else if (msg.t === 'aips') emit('aipickstart');
     else if (msg.t === 'aicxl') emit('aicancel');
+    // [v206] AI 新赛制·局间决策消息
+    else if (msg.t === 'intermission') emit('intermission', msg.p);   // host→client: 进决策(带牌池/血量)
+    else if (msg.t === 'interpick') emit('interpick', msg);           // client→host: 选牌(带 ack 重发)
+    else if (msg.t === 'interpickack') { emit('interpickack'); stopInterPickRetry(); }  // host 已收到, client 停止重发
+    else if (msg.t === 'intergo') emit('intergo', msg.p);             // host→client: 揭晓+继续
     else if (msg.t === 'ping') send({ t: 'pong', ts: msg.ts });
     else if (msg.t === 'pong') { const r = Date.now() - (msg.ts || 0); if (r >= 0 && r < 10000) rtt = r; }
   }
@@ -431,9 +437,10 @@ const Net = (() => {
   // ============ 通用接口 ============
   // [v181] 单通道数据 + 控制消息双通道:
   //   - state/input(高频对局数据): 仅 P2P/TURN 通道(conn), 断开宁丢帧 —— 保持 v167 成果
-  //   - 低频控制消息(start/reset/rmt/bye/aimode/aipick/aipickack/aistart/aips/aicxl):
+  //   - 低频控制消息(start/reset/rmt/bye/aimode/aipick/aipickack/aistart/aips/aicxl + [v206] intermission/interpick/interpickack/intergo):
   //     双通道冗余(P2P + MQTT 兜底), 保证选风格确认/开战等关键流程可靠送达(v174 确认机制的上层保险)
-  const CTRL_TYPES = ['start','reset','rmt','bye','aimode','aipick','aipickack','aistart','aips','aicxl'];
+  const CTRL_TYPES = ['start','reset','rmt','bye','aimode','aipick','aipickack','aistart','aips','aicxl',
+                      'intermission','interpick','interpickack','intergo'];
   function send(obj) {
     obj.q = ++sendSeq;
     if (conn && conn.open) { try { conn.send(obj); } catch (e) {} }
@@ -474,6 +481,22 @@ const Net = (() => {
   function sendAiStart(cfg) { send({ t: 'aistart', cfg }); }
   function sendAiPickStart() { send({ t: 'aips' }); }
   function sendAiCancel() { send({ t: 'aicxl' }); }
+  // ===== [v206] AI 新赛制·局间决策消息 =====
+  function sendIntermission(payload) { send({ t: 'intermission', p: payload }); }
+  // client 选牌带重发(低频但关键: 丢一条永久丢 → 2s 重发至多 5 次, host 回 ack 停止)
+  let _interPickTimer = null, _interPickSeq = 0;
+  function sendInterPick(pickId) {
+    const payload = { t: 'interpick', pick: pickId, i: ++_interPickSeq };
+    let tries = 0;
+    const fire = () => { if (tries >= 5) { clearInterval(_interPickTimer); _interPickTimer = null; return; } tries++; send(payload); };
+    fire();
+    clearInterval(_interPickTimer);
+    _interPickTimer = setInterval(fire, 2000);
+  }
+  function sendInterPickAck() { send({ t: 'interpickack' }); } // host 回执, client 停止重发
+  function sendInterGo(picks) { send({ t: 'intergo', p: picks }); }
+  // host 收到 interpickack 后 client 停止重发(由 main.js 的 interpickack 事件触发调用)
+  function stopInterPickRetry() { clearInterval(_interPickTimer); _interPickTimer = null; }
 
   function getRole() { return role; }
   function isConnected() { return !!(conn && conn.open) || !!(mqttClient && mqttClient.connected && handshaked); }
@@ -514,6 +537,8 @@ const Net = (() => {
     on, hostRoom, joinRoom, abortJoin,
     sendState, sendInput, sendReset, sendBye, sendStart, sendRematchReady,
     sendAiMode, sendAiPick, sendAiPickAck, sendAiStart, sendAiPickStart, sendAiCancel,
+    // [v206] AI 新赛制·局间决策消息
+    sendIntermission, sendInterPick, sendInterPickAck, sendInterGo, stopInterPickRetry,
     setName, getRole, isConnected, isP2PReady, getRoomCode, getMode, getRtt, getStateChannel, getChannelDetail, close
   };
 })();

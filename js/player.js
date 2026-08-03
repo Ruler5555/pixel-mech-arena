@@ -80,8 +80,23 @@ class Mech {
     return true;
   }
 
-  takeHit(dmg, fromX) {
+  takeHit(dmg, fromX, flanked) {
     if (this.state === 'ko') return 0;
+    // [v206] 绕后背刺(机动流 vs 铁壁): 无视防御全额伤害 + 不触发反弹(偷屁股没有反弹)
+    if (flanked) {
+      this.hp = Math.max(0, this.hp - dmg);
+      this.flash = 0.18;
+      this.vx += (this.x >= fromX ? 1 : -1) * 2.2;
+      if (this.onGround && this.state !== 'atkL' && this.state !== 'atkH') {
+        this.setState('hurt');
+      }
+      if (this.hp <= 0) {
+        this.setState('ko');
+        this.vy = 3;
+        this.vx = (this.x >= fromX ? 1 : -1) * 3;
+      }
+      return dmg;
+    }
     // 防御减伤
     if (this.defending && this.state === 'defend') {
       const taken = dmg * 0.1; // 盾牌减伤 90%, 仅承受 10%(内部保留小数, 显示时四舍五入)

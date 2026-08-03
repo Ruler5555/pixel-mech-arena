@@ -155,7 +155,7 @@ function emptyCtrl() {
            tapL:false, tapH:false, tapJump:false };
 }
 
-const STATES = { READY:'ready', FIGHT:'fight', ROUND_END:'roundEnd', MATCH_END:'matchEnd' };
+const STATES = { READY:'ready', FIGHT:'fight', ROUND_END:'roundEnd', MATCH_END:'matchEnd', DECISION:'decision' };
 const MODES  = { OFFLINE:'offline', HOST:'host', CLIENT:'client', AI_HOST:'aiHost', AI_CLIENT:'aiClient' };
 
 // 触屏设备检测(移动端不显示 R/ESC 等键盘提示)
@@ -189,6 +189,32 @@ class Game {
     this.timer = this.roundTime;
     this.timerAcc = 0;
     this.roundWinner = 0;
+    // ===== [v206] AI 双人对战·新赛制(总血量生死战): 仅 AI_HOST/AI_CLIENT 模式启用 =====
+    // 战斗内机甲 hp 保持 120 物理不变(KO/AI 行为零改动); 总血池 800 跨回合贯穿,
+    // 回合结束按「掉血比例 × 总血池 × dmgScale」扣减 + 局间回血 healPct, 打空即输。
+    this.totalHpMax = null;   // 非 AI 模式为 null(不启用)
+    this.dmgScale = 1;
+    this.healPct = 0;
+    this.roundTimes = null;   // AI 模式回合序列 [20,25,30,30,30,30,30]
+    this.maxRounds = 3;
+    this.totalHp1 = 0;
+    this.totalHp2 = 0;
+    this.decisionTimer = 0;   // DECISION 状态倒计时(10s)
+    this.decisionMax = 10;
+    this.awaitingDecision = false; // 等待应用选牌(选牌后置 false)
+    this.decisionPicks = null;     // 两侧选牌记录(揭晓用)
+    this.decisionDone = 0;         // 已选侧数
+    this.decisionRevealTimer = 0;  // 揭晓条计时
+    this.preWarned = false;   // 5s 预警是否已发(每回合一次)
+    this.suddenDeath = false; // 骤死加时(7回合同血)
+    this.suddenDeathRound = false; // 当前是否骤死回合
+    // 牌库状态(每场重置): 融合/专属牌/强化(持续2回合)/药水/背水被动
+    this.cardState = null;
+    // 牌效果乘数(回合开始应用, _resolveCombat 使用)
+    this.atkMul1 = 1; this.atkMul2 = 1;
+    this.defMul1 = 1; this.defMul2 = 1;
+    // 绕后状态(aiHost 专用, 回合开始掷骰 [PLACEHOLDER] 草案数值)
+    this.flank1 = false; this.flank2 = false;
 
     this.state = STATES.READY;
     this.stateTime = 0;
@@ -234,12 +260,23 @@ class Game {
     this.mode = mode;
     this.localPlayer = (mode === MODES.CLIENT || mode === MODES.AI_CLIENT) ? 2 : 1;
     // [v141] 联机 AI 对战模式专属数值: 血量上限 120、每回合 30s; 其余模式维持 100/60
+    // [v206] AI 双人对战新赛制(总血量生死战): 战斗内 120 血物理不变 + 总血池 800 贯穿
     if (mode === MODES.AI_HOST || mode === MODES.AI_CLIENT) {
       this.maxHP = 120;
       this.roundTime = 30;
+      this.totalHpMax = 800;                       // 总血池(跨回合贯穿)
+      this.dmgScale = 0.28;                        // 掉血比例 → 总池消耗缩放
+      this.healPct = 0.15;                         // 局间回血(本回合损失的 15%)
+      this.roundTimes = [20, 25, 30, 30, 30, 30, 30]; // 前紧后松
+      this.maxRounds = 7;
     } else {
       this.maxHP = 100;
       this.roundTime = 60;
+      this.totalHpMax = null;
+      this.dmgScale = 1;
+      this.healPct = 0;
+      this.roundTimes = null;
+      this.maxRounds = 3;
     }
   }
 
@@ -263,6 +300,23 @@ class Game {
     this.winsP1 = 0;
     this.winsP2 = 0;
     this._lastStateFrame = 0; // 新对局重置快照序号(允许主机重启后的小 frame)
+    // [v206] 新赛制: 重置总血池 + 牌库状态(双侧) + 骤死标记
+    if (this.totalHpMax) {
+      this.totalHp1 = this.totalHpMax;
+      this.totalHp2 = this.totalHpMax;
+      this.suddenDeath = false;
+      this.cardState = {
+        fused: false, fuseSub: null, sigN: 0, atkN: 0, defN: 0,
+        potion: false, atkLeft: 0, atkVal: 1, defLeft: 0, defVal: 1,
+        fused2: false, fuseSub2: null, sigN2: 0, atkN2: 0, defN2: 0,
+        potion2: false, atkLeft2: 0, atkVal2: 1, defLeft2: 0, defVal2: 1
+      };
+      this.atkMul1 = 1; this.atkMul2 = 1;
+      this.defMul1 = 1; this.defMul2 = 1;
+      this.flank1 = false; this.flank2 = false;
+      this.preWarned = false;
+      this.awaitingDecision = false;
+    }
     this.startRound();
   }
 
@@ -270,11 +324,144 @@ class Game {
     this._resetMechs();
     this.interp.buffer.length = 0;
     this.interp.prevFoeHp = undefined;
-    this.timer = this.roundTime;
+    // [v206] 回合时长序列(前紧后松); 骤死加时用 30s
+    this.timer = (this.roundTimes && this.roundTimes[this.round - 1]) || (this.suddenDeath ? 30 : this.roundTime);
     this.timerAcc = 0;
     this.particles = [];
     this.shake = 0;
+    this.preWarned = false;
+    // [v206] 回合开始: 牌效果持续计数生效(与模拟器一致: 强化攻/防覆盖融合保底) + 绕后掷骰
+    if (this.mode === MODES.AI_HOST && this.cardState) {
+      const cs = this.cardState;
+      this.atkMul1 = cs.atkLeft > 0 ? cs.atkVal : (cs.fused ? 1.04 : 1); if (cs.atkLeft > 0) cs.atkLeft--;
+      this.atkMul2 = cs.atkLeft2 > 0 ? cs.atkVal2 : (cs.fused2 ? 1.04 : 1); if (cs.atkLeft2 > 0) cs.atkLeft2--;
+      this.defMul1 = cs.defLeft > 0 ? cs.defVal : (cs.fused ? 0.96 : 1); if (cs.defLeft > 0) cs.defLeft--;
+      this.defMul2 = cs.defLeft2 > 0 ? cs.defVal2 : (cs.fused2 ? 0.96 : 1); if (cs.defLeft2 > 0) cs.defLeft2--;
+      // 绕后掷骰: 机动流(疾风/游击)绕后克铁壁 [PLACEHOLDER] 草案
+      this.flank1 = this._rollFlank(this.aiPresetP1 ? this.aiPresetP1.id : null);
+      this.flank2 = this._rollFlank(this.aiPresetP2 ? this.aiPresetP2.id : null);
+      // 背水被动(方案b): 总血落后>20% 自动下回合攻击×(1+30%) [PLACEHOLDER]
+      if (this.totalHp2 - this.totalHp1 > 0.2 * this.totalHpMax) this.atkMul1 = Math.max(this.atkMul1, 1.30);
+      if (this.totalHp1 - this.totalHp2 > 0.2 * this.totalHpMax) this.atkMul2 = Math.max(this.atkMul2, 1.30);
+    }
     this.setState(STATES.READY);
+  }
+
+  // [v206] 绕后掷骰: 只有机动流(疾风/游击)能绕后, 打铁壁时背刺
+  _rollFlank(styleId) {
+    if (!styleId) return false;
+    const rate = styleId === 'gale' ? 0.5 : styleId === 'skirmisher' ? 0.3 : 0; // [PLACEHOLDER]
+    return rate > 0 && Math.random() < rate;
+  }
+
+  // ===== [v206] AI 双人对战·牌库系统(方案 B 定稿, R3 模拟数值) =====
+  // 专属招牌牌(每风格 1 张, 持续 2 回合, 每场 2 次第二次减半) [PLACEHOLDER] R3 定稿
+  _sigCard(styleId, half) {
+    const h = half ? 0.5 : 1;
+    switch (styleId) {
+      case 'berserker':  return { atk: 1 + 0.15 * h, def: 1 };           // 暴怒 攻+15%
+      case 'bulwark':    return { atk: 1, def: 1 - 0.15 * h };           // 硬化 承伤−15%
+      case 'gale':       return { atk: 1 + 0.15 * h, def: 1 };           // 疾驰(机动≈攻+15% loss 近似)
+      case 'skirmisher': return { atk: 1 + 0.15 * h, def: 1 };           // 游走(中距伤害≈攻+15%)
+      case 'precision':  return { atk: 1 + 0.10 * h, def: 1 - 0.03 * h };// 看破 攻+10% 承伤−3%
+      case 'balanced':   return { atk: 1 + 0.10 * h, def: 1 - 0.05 * h };// 蓄力 攻+10% 承伤−5%
+      default:           return { atk: 1, def: 1 };
+    }
+  }
+  // 融合推荐副风格(打某对手时): 基于克制矩阵 v2, 副风格 = 克对手的风格 [PLACEHOLDER]
+  _fuseRecommend(foeStyle) {
+    const m = {
+      berserker: 'skirmisher', bulwark: 'gale', gale: 'bulwark',
+      skirmisher: 'bulwark', precision: 'skirmisher', balanced: 'precision'
+    };
+    return m[foeStyle] || 'balanced';
+  }
+  // 融合 cfg: 主 70% + 副 30% 参数插值(与模拟器 fuseConfig 同构)
+  _fuseConfig(mainId, subId) {
+    const main = AI_PRESETS[mainId], sub = AI_PRESETS[subId];
+    const out = {};
+    for (const k in main) {
+      if (k === 'name' || k === 'emoji' || k === 'desc' || k === 'id') { out[k] = main[k]; continue; }
+      out[k] = (typeof main[k] === 'number' && typeof sub[k] === 'number') ? main[k] * 0.7 + sub[k] * 0.3 : main[k];
+    }
+    return out;
+  }
+  // 该侧当前可用牌池(每局间出 2-3 张选 1)
+  _cardAvail(side) {
+    const cs = this.cardState;
+    const S = side === 1 ? { fused: cs.fused, sigN: cs.sigN, atkN: cs.atkN, defN: cs.defN, potion: cs.potion, sigN2: 0 }
+                         : { fused: cs.fused2, sigN: cs.sigN2, atkN: cs.atkN2, defN: cs.defN2, potion: cs.potion2, sigN2: 0 };
+    const myHp = side === 1 ? this.totalHp1 : this.totalHp2;
+    const foeHp = side === 1 ? this.totalHp2 : this.totalHp1;
+    const behind = foeHp - myHp;
+    const avail = [];
+    // 融合刷出(GDD 3.3): 局间1 落后必出/领先50%, 最迟局间2 保底
+    const fuseAvail = !S.fused && (this.round === 1 ? (behind > 0 ? true : Math.random() < 0.5) : true);
+    if (fuseAvail) avail.push('fuse');
+    if (S.sigN < 2) avail.push('sig');
+    if (S.atkN < 2) avail.push('atk');
+    if (S.defN < 2) avail.push('def');
+    if (!S.potion && myHp < 0.4 * this.totalHpMax) avail.push('potion');
+    return avail;
+  }
+  // 局间决策 payload(main.js 显示 UI 用)
+  _decisionPayload() {
+    return {
+      round: this.round,
+      hp1: Math.max(0, Math.round(this.totalHp1)),
+      hp2: Math.max(0, Math.round(this.totalHp2)),
+      maxHp: this.totalHpMax,
+      avail1: this._cardAvail(1),
+      avail2: this._cardAvail(2)
+    };
+  }
+  // 应用选牌(pick: fuse/sig/atk/def/potion/null=跳过; side: 1/2)。host 权威, 双侧集齐后揭晓继续
+  applyDecision(pick, side, subId) {
+    if (!this.awaitingDecision) return;
+    if (this.decisionPicks && this.decisionPicks[side]) return; // 该侧已选(防超时重复)
+    if (!this.decisionPicks) this.decisionPicks = {};
+    const cs = this.cardState;
+    const styleId = side === 1 ? (this.aiPresetP1 ? this.aiPresetP1.id : 'balanced')
+                               : (this.aiPresetP2 ? this.aiPresetP2.id : 'balanced');
+    const foeStyle = side === 1 ? (this.aiPresetP2 ? this.aiPresetP2.id : 'balanced')
+                                : (this.aiPresetP1 ? this.aiPresetP1.id : 'balanced');
+    const pickName = { fuse: '融合', sig: '招牌牌', atk: '强化攻', def: '强化防', potion: '药水', skip: '跳过' };
+    this.decisionPicks[side] = { pick: pick || 'skip', pickId: pick, style: styleId, sub: subId };
+    if (pick) this._applyCard(pick, side, styleId, foeStyle, subId);
+    this.decisionDone = (this.decisionDone || 0) + 1;
+    if (this.decisionDone >= 2) this._finishDecision();
+  }
+  _applyCard(pick, side, styleId, foeStyle, subId) {
+    const cs = this.cardState;
+    const s = side === 1;
+    if (pick === 'fuse') {
+      const sub = subId || this._fuseRecommend(foeStyle);
+      const cfg = this._fuseConfig(styleId, sub);
+      if (s) { cs.fused = true; cs.fuseSub = sub; if (this.ai1) this.ai1 = makeAI(cfg); }
+      else   { cs.fused2 = true; cs.fuseSub2 = sub; if (this.ai2) this.ai2 = makeAI(cfg); }
+    } else if (pick === 'sig') {
+      const n = s ? ++cs.sigN : ++cs.sigN2;
+      const c = this._sigCard(styleId, n >= 2);
+      if (s) { cs.atkVal = c.atk; cs.defVal = c.def; cs.atkLeft = 2; cs.defLeft = 2; }
+      else   { cs.atkVal2 = c.atk; cs.defVal2 = c.def; cs.atkLeft2 = 2; cs.defLeft2 = 2; }
+    } else if (pick === 'atk') {
+      const n = s ? ++cs.atkN : ++cs.atkN2;
+      const v = 1 + 0.08 * (n >= 2 ? 0.5 : 1); // 强化攻 +8% 持续 2 回合, 第二次减半
+      if (s) { cs.atkVal = v; cs.atkLeft = 2; } else { cs.atkVal2 = v; cs.atkLeft2 = 2; }
+    } else if (pick === 'def') {
+      const n = s ? ++cs.defN : ++cs.defN2;
+      const v = 1 - 0.06 * (n >= 2 ? 0.5 : 1); // 强化防 承伤−6%, 第二次减半
+      if (s) { cs.defVal = v; cs.defLeft = 2; } else { cs.defVal2 = v; cs.defLeft2 = 2; }
+    } else if (pick === 'potion') {
+      if (s) cs.potion = true; else cs.potion2 = true; // 下次回合结束结算时回血 +30%
+    }
+  }
+  _finishDecision() {
+    this.awaitingDecision = false;
+    this.decisionTimer = this.decisionMax;
+    // 揭晓回调(main.js 显示 2s 揭晓条)
+    if (this.onReveal) this.onReveal(this.decisionPicks);
+    this.decisionRevealTimer = 2.0;
   }
 
   setState(s) {
@@ -367,6 +554,11 @@ class Game {
     else if (this.state === STATES.FIGHT) {
       this.timerAcc += dt;
       if (this.timerAcc >= 1) { this.timerAcc -= 1; this.timer = Math.max(0, this.timer - 1); }
+      // [v206] 5s 预警: 回合结束前 5s 触发一次(通知 main.js 显示"即将进入决策")
+      if (this.mode === MODES.AI_HOST && this.totalHpMax && !this.preWarned && this.timer <= 5) {
+        this.preWarned = true;
+        if (this.onPreDecision) this.onPreDecision();
+      }
 
       const c1 = (this.mode === MODES.AI_HOST) ? this.ai1.compute(this.p1, this.p2, dt) : this._localCtrl();
       let c2;
@@ -389,23 +581,66 @@ class Game {
 
       this.particles = this.particles.filter(p => { p.update(dt); return p.life > 0; });
 
+      // [v206] 骤死加时: 谁先掉血谁输(回合开始时双方满血, 首次掉血即判负)
+      if (this.suddenDeathRound) {
+        const sd1 = this.p1.hp < this.maxHP, sd2 = this.p2.hp < this.maxHP;
+        if (sd1 || sd2) {
+          let winner = 0;
+          if (sd1 && !sd2) winner = 2;
+          else if (sd2 && !sd1) winner = 1;
+          else winner = this.p1.hp >= this.p2.hp ? 1 : 2; // 同帧都掉血比残量
+          this.roundWinner = winner;
+          this.setState(STATES.MATCH_END);
+        }
+      }
+
       const p1Dead = this.p1.state === 'ko' || this.p1.hp <= 0;
       const p2Dead = this.p2.state === 'ko' || this.p2.hp <= 0;
       if (p1Dead || p2Dead || this.timer <= 0) {
-        let winner = 0;
-        if (p1Dead && !p2Dead) winner = 2;
-        else if (p2Dead && !p1Dead) winner = 1;
-        else {
-          if (this.p1.hp > this.p2.hp) winner = 1;
-          else if (this.p2.hp > this.p1.hp) winner = 2;
-          else {
-            winner = 0; // 血量相同 -> 平局(已移除「同受伤判负」机制)
+        if (this.mode === MODES.AI_HOST && this.totalHpMax) {
+          // ===== [v206] AI 双人对战新赛制: 总血池结算(与模拟器 loss 映射同构) =====
+          // 本回合双方掉血比例 → 扣总血池(×dmgScale) → 局间回血(healPct, 药水提升至 +30%)
+          const loss1 = Math.max(0, (this.maxHP - Math.max(0, this.p1.hp)) / this.maxHP);
+          const loss2 = Math.max(0, (this.maxHP - Math.max(0, this.p2.hp)) / this.maxHP);
+          const cs = this.cardState;
+          const healEff1 = this.healPct + (cs.potion ? 0.30 : 0);
+          const healEff2 = this.healPct + (cs.potion2 ? 0.30 : 0);
+          if (cs.potion) cs.potion = false;
+          if (cs.potion2) cs.potion2 = false;
+          const consume1 = loss1 * this.totalHpMax * this.dmgScale * (1 - healEff1);
+          const consume2 = loss2 * this.totalHpMax * this.dmgScale * (1 - healEff2);
+          this.totalHp1 = Math.max(0, this.totalHp1 - consume1);
+          this.totalHp2 = Math.max(0, this.totalHp2 - consume2);
+          this.roundWinner = 0;
+          // 胜负判定: 打空即输 → 满 7 回合比残量 → 同血骤死加时
+          if (this.totalHp1 <= 0 && this.totalHp2 > 0) { this.roundWinner = 2; this.setState(STATES.MATCH_END); }
+          else if (this.totalHp2 <= 0 && this.totalHp1 > 0) { this.roundWinner = 1; this.setState(STATES.MATCH_END); }
+          else if (this.totalHp1 <= 0 && this.totalHp2 <= 0) {
+            this.roundWinner = this.totalHp1 >= this.totalHp2 ? 1 : 2; // 同时打空取残量高者
+            this.setState(STATES.MATCH_END);
           }
+          else if (this.round >= this.maxRounds) {
+            if (this.totalHp1 > this.totalHp2) { this.roundWinner = 1; this.setState(STATES.MATCH_END); }
+            else if (this.totalHp2 > this.totalHp1) { this.roundWinner = 2; this.setState(STATES.MATCH_END); }
+            else { this.suddenDeath = true; this.setState(STATES.ROUND_END); } // 同血 → 骤死
+          }
+          else this.setState(STATES.ROUND_END); // 正常进入结算 + 局间决策
+        } else {
+          let winner = 0;
+          if (p1Dead && !p2Dead) winner = 2;
+          else if (p2Dead && !p1Dead) winner = 1;
+          else {
+            if (this.p1.hp > this.p2.hp) winner = 1;
+            else if (this.p2.hp > this.p1.hp) winner = 2;
+            else {
+              winner = 0; // 血量相同 -> 平局(已移除「同受伤判负」机制)
+            }
+          }
+          if (winner === 1) this.winsP1++;
+          else if (winner === 2) this.winsP2++;
+          this.roundWinner = winner;
+          this.setState(STATES.ROUND_END);
         }
-        if (winner === 1) this.winsP1++;
-        else if (winner === 2) this.winsP2++;
-        this.roundWinner = winner;
-        this.setState(STATES.ROUND_END);
       }
     }
     else if (this.state === STATES.ROUND_END) {
@@ -413,8 +648,43 @@ class Game {
       this.p2.update(dt, emptyCtrl(), this.p1, this);
       this.particles = this.particles.filter(p => { p.update(dt); return p.life > 0; });
       if (this.stateTime > 2.2) {
-        if (this.winsP1 >= 2 || this.winsP2 >= 2) this.setState(STATES.MATCH_END);
-        else { this.round++; this.startRound(); }
+        if (this.mode === MODES.AI_HOST && this.totalHpMax) {
+          if (this.suddenDeath) {
+            // 骤死加时: 从 ROUND_END 进新一回合(满血, 谁先掉血谁输, 由 _resolveCombat 特殊判定)
+            this.round = this.maxRounds + 1; // 标记骤死回合
+            this.startRound();
+            this.suddenDeathRound = true;
+            this.setState(STATES.FIGHT);
+          } else {
+            // 正常局间: 进入 DECISION(定格 + 选牌), 由 main.js 处理 UI 与选牌
+            this.decisionTimer = this.decisionMax;
+            this.awaitingDecision = true;
+            this.setState(STATES.DECISION);
+            if (this.onDecision) this.onDecision(this._decisionPayload());
+          }
+        } else {
+          if (this.winsP1 >= 2 || this.winsP2 >= 2) this.setState(STATES.MATCH_END);
+          else { this.round++; this.startRound(); }
+        }
+      }
+    }
+    else if (this.state === STATES.DECISION) {
+      // [v206] 局间决策: 画面定格(模拟暂停), 只走倒计时; 选牌由 main.js 调 applyDecision
+      if (this.awaitingDecision) {
+        this.decisionTimer -= dt;
+        if (this.decisionTimer <= 0) {
+          this.applyDecision(null, 1); // 超时未选 = 跳过(防重复: applyDecision 内已选侧忽略)
+          this.applyDecision(null, 2);
+        }
+      } else if (this.decisionRevealTimer > 0) {
+        this.decisionRevealTimer -= dt;
+        if (this.decisionRevealTimer <= 0) {
+          // 揭晓完 → 下一回合
+          this.decisionPicks = null;
+          this.decisionDone = 0;
+          this.round++;
+          this.startRound();
+        }
       }
     }
     else if (this.state === STATES.MATCH_END) {
@@ -442,7 +712,7 @@ class Game {
 
   // ===== 序列化(主机广播) =====
   _serializeState() {
-    return {
+    const s = {
       p1: this._serMech(this.p1),
       p2: this._serMech(this.p2),
       round: this.round,
@@ -455,6 +725,15 @@ class Game {
       shake: this.shake,
       frame: this.frame
     };
+    // [v206] 新赛制: 总血池/骤死标记(观战端 HUD 显示)
+    if (this.totalHpMax) {
+      s.th1 = Math.max(0, Math.round(this.totalHp1));
+      s.th2 = Math.max(0, Math.round(this.totalHp2));
+      s.thMax = this.totalHpMax;
+      s.sd = this.suddenDeath || this.suddenDeathRound;
+      s.dt = this.decisionTimer;
+    }
+    return s;
   }
   _serMech(m) {
     return {
@@ -533,6 +812,14 @@ class Game {
     this.timer = s.timer;
     this.roundWinner = s.rw;
     this.shake = s.shake;
+    // [v206] 新赛制: 总血池/骤死/决策倒计时(观战端 HUD)
+    if (s.thMax) {
+      this.totalHpMax = s.thMax;
+      this.totalHp1 = s.th1;
+      this.totalHp2 = s.th2;
+      this.suddenDeath = !!s.sd;
+      this.decisionTimer = s.dt || 0;
+    }
     if (s.gs !== this.state) this.setState(s.gs);
     this.stateTime = s.gst;
   }
@@ -781,10 +1068,23 @@ class Game {
     const hb = attacker.attackHitbox();
     const bb = defender.bodyBox();
     if (aabb(hb, bb)) {
-      const result = defender.takeHit(hb.dmg, hb.fromX);
+      // [v206] AI 模式: 牌效果乘数(强化攻/防, 覆盖逻辑与模拟器一致)
+      let dmgMul = 1;
+      if (this.mode === MODES.AI_HOST && this.totalHpMax) {
+        dmgMul = (attacker === this.p1 ? this.atkMul1 : this.atkMul2)
+               * (defender === this.p1 ? this.defMul1 : this.defMul2);
+      }
+      // [v206] 绕后: 攻击方机动流(疾风/游击)绕后状态 && 防御方铁壁 → 背刺无视防御
+      const isFlanking = (attacker === this.p1 && this.flank1) || (attacker === this.p2 && this.flank2);
+      const foeIsBulwark = (defender === this.p1 && this.aiPresetP1 && this.aiPresetP1.id === 'bulwark')
+                        || (defender === this.p2 && this.aiPresetP2 && this.aiPresetP2.id === 'bulwark');
+      const flanking = isFlanking && foeIsBulwark;
+      const result = defender.takeHit(hb.dmg * dmgMul, hb.fromX, flanking);
       attacker._hitDone = true;
       this.shake = result < 0 ? 0.12 : (attacker.atk && attacker.atk.type === 'H' ? 0.35 : 0.18);
       this._spawnHitFX(hb.x + hb.w / 2, hb.y + hb.h / 2, result < 0, attacker.atk && attacker.atk.type === 'H');
+      // 背刺附加: 无视防御已由 takeHit 处理, 补背刺硬直
+      if (flanking && defender.state !== 'ko') defender.setState('hurt');
       // 防御反伤: 减伤90% + 反伤60% 给攻击者
       if (result < 0) {
         const reflected = Math.round(hb.dmg * 0.6); // 反伤 60%, 攻击方承担

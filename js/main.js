@@ -59,6 +59,21 @@
   const btnOnlineModePvP = document.getElementById('btnOnlineModePvP');
   const btnOnlineModeAIvAI = document.getElementById('btnOnlineModeAIvAI');
 
+  // ===== DOM: [v206] AI 新赛制 UI(总血池/5s预警/揭晓/局间牌组) =====
+  const elAiTotalHp = document.getElementById('aiTotalHp');
+  const elAiPreWarn = document.getElementById('aiPreWarn');
+  const elAiReveal = document.getElementById('aiReveal');
+  const aiCardPanel = document.getElementById('aiCardPanel');
+  const aiCardRow = document.getElementById('aiCardRow');
+  const aiCardTimer = document.getElementById('aiCardTimer');
+  const aiCardSkip = document.getElementById('aiCardSkip');
+  const aiCardStatus = document.getElementById('aiCardStatus');
+  let aiDecisionState = 'none';   // none=无决策 / pending=选牌中 / picked=已选等待 / reveal=揭晓中
+  let aiMySide = 1;               // host=1, client=2(局间选牌侧)
+  let aiCardTimerIv = null;
+  let aiDecisionPayload = null;
+  let aiLocalPick = null;         // 我选的牌(秘密)
+
   // ===== DOM: AI 对战选风格屏(早期声明, 避免切屏时 TDZ) =====
   const aiPickScreen = document.getElementById('aiPickScreen');
   // [v136] 选风格屏顶部改用与对局相同的 top-cluster(延迟+模式+退出), 取代原 v130 的左上返回键
@@ -140,6 +155,16 @@
     elWinsP2.innerHTML = fmtWins(game.winsP2);
     elRound.textContent = game.round;
     elTimer.textContent = game.timer;
+    // [v206] AI 新赛制: 总血池贯穿 HUD(800 血条, 跨回合连续可见)
+    if (game.totalHpMax && elAiTotalHp) {
+      elAiTotalHp.hidden = false;
+      const h1 = Math.max(0, Math.round(game.totalHp1 || 0));
+      const h2 = Math.max(0, Math.round(game.totalHp2 || 0));
+      const sd = game.suddenDeath || game.suddenDeathRound ? ' ⚔️骤死' : '';
+      elAiTotalHp.textContent = '总血 ' + h1 + '/' + game.totalHpMax + ' vs ' + h2 + '/' + game.totalHpMax + sd;
+    } else if (elAiTotalHp) {
+      elAiTotalHp.hidden = true;
+    }
     if (game.mode === 'offline') {
       elNet.textContent = ''; elNet.className = 'net-status';
     } else if (Net.isConnected()) {
@@ -148,7 +173,153 @@
       elNet.textContent = '●'; elNet.className = 'net-status off';
     }
     updateNetTags();
+    tickPreWarn(); // [v206] 5s 预警倒计时(HUD 60ms 周期驱动)
   }
+
+  // ===== [v206] AI 双人对战·局间决策 UI 与流程 =====
+  const CARD_META = {
+    fuse:   { emoji: '🔀', name: '风格融合', eff: '混入副风格30%打法\n整场全属性+4%保底', left: '全场1次' },
+    sig:    { emoji: '⭐', name: '招牌牌',   eff: '深化本流派打法\n持续2回合', left: '每场2次' },
+    atk:    { emoji: '⚔️', name: '强化·攻', eff: '攻击+8%\n持续2回合', left: '第2次减半' },
+    def:    { emoji: '🛡️', name: '强化·防', eff: '承伤-6%\n持续2回合', left: '第2次减半' },
+    potion: { emoji: '🧪', name: '恢复药水', eff: '下回合结算回血+30%', left: '血量<40%出现' },
+    skip:   { emoji: '⏭️', name: '跳过',    eff: '不选任何牌', left: '' }
+  };
+  // 绑定 game 决策回调(host 权威跑, client 由 intermission 消息驱动)
+  game.onPreDecision = () => {
+    if (elAiPreWarn) { elAiPreWarn.classList.remove('hidden'); elAiPreWarn.textContent = '⚡ 即将进入决策 5'; }
+  };
+  game.onDecision = (payload) => {
+    if (elAiPreWarn) elAiPreWarn.classList.add('hidden');
+    aiDecisionPayload = payload;
+    aiDecisionState = 'pending';
+    aiLocalPick = null;
+    if (game.mode === 'aiHost') {
+      // host 侧: 本地显示(自己为 side 1) + 发 intermission 给 client(带 client 侧牌池)
+      showCardPanel(payload, 1);
+      Net.sendIntermission(payload);
+    }
+  };
+  game.onReveal = (picks) => {
+    // host 侧揭晓: 显示揭晓条 + 通知 client 继续
+    showRevealBar(picks);
+    Net.sendInterGo(picks);
+  };
+  // 显示 5s 预警倒计时(hook 到 updateHUD 周期: 由 setInterval 驱动)
+  function tickPreWarn() {
+    if (elAiPreWarn && !elAiPreWarn.classList.contains('hidden') && game && game.state === 'fight') {
+      if (game.timer <= 5 && game.timer >= 0) elAiPreWarn.textContent = '⚡ 即将进入决策 ' + Math.max(1, Math.ceil(game.timer));
+    }
+  }
+  // 渲染牌组面板(定格画面下半屏)
+  function showCardPanel(payload, mySide) {
+    if (!aiCardPanel || !aiCardRow) return;
+    aiMySide = mySide;
+    const avail = mySide === 1 ? payload.avail1 : payload.avail2;
+    const cards = avail && avail.length ? avail : ['skip'];
+    aiCardRow.innerHTML = '';
+    cards.forEach((c) => {
+      const meta = CARD_META[c] || CARD_META.skip;
+      const card = document.createElement('div');
+      card.className = 'ai-card';
+      card.innerHTML = '<span class="ac-emoji">' + meta.emoji + '</span>' +
+        '<span class="ac-name">' + meta.name + '</span>' +
+        '<span class="ac-eff">' + meta.eff.replace(/\n/g, '<br>') + '</span>' +
+        '<span class="ac-left">' + meta.left + '</span>';
+      card.addEventListener('click', () => pickCard(c));
+      aiCardRow.appendChild(card);
+    });
+    aiCardStatus.textContent = '秘密选择中…';
+    aiCardPanel.classList.add('show');
+    aiDecisionState = 'pending';
+    startCardTimer();
+  }
+  function startCardTimer() {
+    if (aiCardTimerIv) clearInterval(aiCardTimerIv);
+    let left = 10;
+    aiCardTimer.textContent = left + 's';
+    aiCardTimerIv = setInterval(() => {
+      left--;
+      if (aiCardTimer) aiCardTimer.textContent = Math.max(0, left) + 's';
+      if (left <= 0) { clearInterval(aiCardTimerIv); aiCardTimerIv = null; onCardTimeout(); }
+    }, 1000);
+  }
+  function onCardTimeout() {
+    if (aiDecisionState === 'pending') pickCard(null); // 超时 = 跳过
+  }
+  function pickCard(pickId) {
+    if (aiDecisionState !== 'pending') return;
+    aiDecisionState = 'picked';
+    aiLocalPick = pickId;
+    if (aiCardTimerIv) { clearInterval(aiCardTimerIv); aiCardTimerIv = null; }
+    // 高亮所选 + 状态
+    const cards = aiCardRow.querySelectorAll('.ai-card');
+    cards.forEach((c) => { if (c.dataset) {} });
+    if (pickId) {
+      aiCardStatus.textContent = '✅ 已选·等待对手…';
+      aiCardRow.querySelectorAll('.ai-card').forEach((c, i) => {
+        // 按牌序高亮对应(简化为全部禁用)
+        c.style.pointerEvents = 'none'; c.style.opacity = '0.55';
+      });
+    } else {
+      aiCardStatus.textContent = '⏭️ 已跳过';
+      aiCardRow.querySelectorAll('.ai-card').forEach((c) => { c.style.pointerEvents = 'none'; c.style.opacity = '0.4'; });
+    }
+    // 提交: host 本地应用(side 1) / client 发消息给 host(side 2)
+    if (game.mode === 'aiHost') {
+      const sub = pickId === 'fuse' ? game._fuseRecommend(foeStyleOf(2)) : undefined;
+      game.applyDecision(pickId, 1, sub);
+    } else if (game.mode === 'aiClient') {
+      Net.sendInterPick(pickId);
+    }
+  }
+  function foeStyleOf(side) {
+    const p = side === 1 ? game.aiPresetP2 : game.aiPresetP1;
+    return p ? p.id : 'balanced';
+  }
+  function hideCardPanel() {
+    if (aiCardPanel) aiCardPanel.classList.remove('show');
+    if (aiCardTimerIv) { clearInterval(aiCardTimerIv); aiCardTimerIv = null; }
+    aiDecisionState = 'none';
+  }
+  // 揭晓条(双方选择)
+  function showRevealBar(picks) {
+    if (!elAiReveal || !picks) return;
+    const parts = [];
+    for (const side of [1, 2]) {
+      const p = picks[side];
+      if (!p) continue;
+      const nm = p.pickId === 'fuse' ? '融合·' + (p.sub || '?') : (CARD_META[p.pickId] ? CARD_META[p.pickId].name : p.pick);
+      parts.push((side === 1 ? '蓝方' : '红方') + '：' + nm);
+    }
+    elAiReveal.textContent = '📢 ' + parts.join('　');
+    elAiReveal.classList.remove('hidden');
+    clearTimeout(elAiReveal._t);
+    elAiReveal._t = setTimeout(() => elAiReveal.classList.add('hidden'), 2400);
+  }
+  // client 侧: 收到 host intermission(进决策) / intergo(继续)
+  Net.on('intermission', (payload) => {
+    if (game.mode !== 'aiClient') return;
+    if (elAiPreWarn) elAiPreWarn.classList.add('hidden');
+    aiDecisionPayload = payload;
+    showCardPanel(payload, 2);
+  });
+  Net.on('interpickack', () => {
+    // host 已收到我的选牌(防丢重发机制已在发送侧处理, 这里更新状态)
+    if (aiDecisionState === 'picked') aiCardStatus.textContent = '✅ 已选·等待对手…';
+  });
+  Net.on('interpick', (msg) => {
+    // host 权威: 收到 client 选牌 → 应用(side 2), 集齐后由 game._finishDecision 揭晓
+    if (game.mode !== 'aiHost') return;
+    Net.sendInterPickAck();
+    const sub = msg && msg.pick === 'fuse' ? game._fuseRecommend(foeStyleOf(1)) : undefined;
+    game.applyDecision(msg ? msg.pick : null, 2, sub);
+  });
+  Net.on('intergo', (picks) => {
+    hideCardPanel();
+    showRevealBar(picks);
+  });
+  aiCardSkip.addEventListener('click', () => { if (aiDecisionState === 'pending') pickCard(null); });
 
   // [v136] 模式/延迟标签: 对局顶栏(#topCluster)与 AI 选风格屏顶栏(aiPickRtt/aiPickModeTag)共用同一套显示逻辑
   // [v164] 真实通道: getChannelDetail() 识别 ICE 实际候选类型(直连/TURN中继), 避免"P2P标签骗人"
@@ -1178,6 +1349,11 @@
   // ===== 更新公告: 点击版本号显示近三次更新(倒序: 最新在前; 每条用短句概括改动, 一点一换行; 每次发版须 prepend 一条真实版本) =====
   // 文案规则: 每条不超过 30 字, 一条一个圆点, 折行不再出点(见 .cl-pt 悬挂缩进)
   const CHANGELOG = [
+    ['v205', [
+      'AI双人新赛制:总血量800贯穿7回合,回血15%',
+      '局间定格选牌:融合/招牌牌/强化/药水10秒决策',
+      '机动流可绕后偷袭铁壁,背刺无视防御'
+    ]],
     ['v204', [
       '六种AI风格全面平衡,胜率收敛至40-65%'
     ]],

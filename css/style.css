@@ -1022,6 +1022,133 @@ body.ai-pick .exit-mobile-btn { display: inline-flex; font-size: 9px; padding: 3
 }
 /* AI 观战模式: 隐藏所有触控操作键(玩家不操控, 仅为观战) */
 .ai-spectate .touch-controls { display: none !important; }
+
+/* ===== [v206] AI 双人对战新赛制 UI ===== */
+.total-hp {
+  margin-top: 4px;
+  font-size: 10px;
+  color: var(--accent-lt, #ffd66b);
+  text-align: center;
+  white-space: nowrap;
+  line-height: 1.3;
+}
+.ai-pre-warn {
+  position: absolute;
+  top: 8px; left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 14px;
+  border-radius: 999px;
+  background: rgba(255, 90, 40, 0.82);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  z-index: 45;
+  animation: aiWarnPulse 1s ease-in-out infinite;
+  white-space: nowrap;
+}
+@keyframes aiWarnPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+.ai-reveal {
+  position: absolute;
+  top: 44px; left: 50%;
+  transform: translateX(-50%);
+  padding: 6px 16px;
+  border-radius: 10px;
+  background: rgba(10, 14, 26, 0.88);
+  border: 1px solid rgba(255, 214, 107, 0.5);
+  color: #ffd66b;
+  font-size: 13px;
+  font-weight: 600;
+  z-index: 45;
+  text-align: center;
+  white-space: nowrap;
+  max-width: min(320px, calc(100vw - 24px));
+}
+/* 局间决策牌组: 覆盖触控区(画面定格时), 三张横排 */
+.ai-card-panel {
+  display: none;
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  padding: 10px 10px calc(14px + env(safe-area-inset-bottom));
+  background: linear-gradient(0deg, rgba(8, 11, 20, 0.94) 0%, rgba(8, 11, 20, 0.82) 70%, rgba(8, 11, 20, 0) 100%);
+  z-index: 60;
+  box-sizing: border-box;
+  pointer-events: auto;
+}
+.ai-card-panel.show { display: block; }
+.ai-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.ai-card-title {
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 12px;
+  letter-spacing: 1px;
+}
+.ai-card-timer {
+  color: #ffd66b;
+  font-size: 16px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.ai-card-row {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}
+.ai-card {
+  flex: 1;
+  max-width: 150px;
+  min-height: 92px;
+  padding: 8px 6px;
+  border-radius: 12px;
+  background: rgba(24, 32, 52, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  transition: transform 0.15s ease, border-color 0.15s ease;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.ai-card:active { transform: scale(0.95); }
+.ai-card.sel {
+  border-color: #ffd66b;
+  background: rgba(52, 42, 16, 0.95);
+  box-shadow: 0 0 0 2px rgba(255, 214, 107, 0.35);
+}
+.ai-card .ac-emoji { font-size: 20px; }
+.ai-card .ac-name { font-size: 13px; font-weight: 700; }
+.ai-card .ac-eff { font-size: 10px; color: rgba(255, 255, 255, 0.72); text-align: center; line-height: 1.35; }
+.ai-card .ac-left { font-size: 9px; color: rgba(255, 255, 255, 0.45); }
+.ai-card-foot {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+}
+.ai-card-skip {
+  padding: 6px 18px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 12px;
+}
+.ai-card-status {
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 11px;
+}
 .move-zone {
   position: relative;
   width: clamp(104px, 28vw, 132px);
