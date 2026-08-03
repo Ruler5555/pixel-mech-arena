@@ -322,6 +322,10 @@ class Game {
       this.awaitingDecision = false;
       this.decisionPicks = null;
       this.decisionDone = 0;
+      // [v211] 清除局间携带血量: 否则 rematch 后 startRound 用上局残血覆盖新机甲满血
+      //   (用户实测"再来一局血量还是几十"的根因)
+      this._carryHp1 = undefined;
+      this._carryHp2 = undefined;
     }
     this.startRound();
   }
@@ -330,6 +334,16 @@ class Game {
     this._resetMechs();
     this.interp.buffer.length = 0;
     this.interp.prevFoeHp = undefined;
+    // [v211] 清空 AI 观战渲染缓冲(specInterp): 否则 rematch 后首帧仍回放上局残留快照,
+    //   血量显示"还是上局结束的几十"(用户实测 bug 根因)
+    if (this.specInterp) {
+      this.specInterp.b1.length = 0;
+      this.specInterp.b2.length = 0;
+      this.specInterp.prevHp1 = undefined;
+      this.specInterp.prevHp2 = undefined;
+      this.specInterp.init = false;
+      this.specInterp.lastT = 0;
+    }
     // [v206] 一管血 800: 局间不清空, 恢复上回合剩余血量(回血已在回合结算时完成)
     if (this.mode === MODES.AI_HOST && this.totalHpMax) {
       if (this._carryHp1 !== undefined) { this.p1.hp = Math.min(this.maxHP, Math.max(0, this._carryHp1)); }
@@ -859,11 +873,12 @@ class Game {
     this.roundWinner = s.rw;
     this.shake = s.shake;
     // [v206] 新赛制: 总血池/骤死/决策倒计时(观战端 HUD)
-    // [v209] 保险: 新对局首帧(round=1+ready+stateTime<0.5)不覆盖本地已重置的满血
-    const isFreshRound = (s.round === 1 && s.gs === 'ready' && (s.gst || 0) < 0.5);
+    // [v211] 直接覆盖 host 权威血量(删除 v209 的 isFreshRound 保护:
+    //   它会在 aistart 丢失/rematch 时阻止 client 血量跟随 host, 导致"再来一局血量不重置")
     if (s.thMax) {
       this.totalHpMax = s.thMax;
-      if (!isFreshRound) { this.totalHp1 = s.th1; this.totalHp2 = s.th2; }
+      this.totalHp1 = s.th1;
+      this.totalHp2 = s.th2;
       this.suddenDeath = !!s.sd;
       this.decisionTimer = s.dt || 0;
     }

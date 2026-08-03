@@ -1117,6 +1117,10 @@
     hudP1Name.textContent = '你的AI·' + hp1;
     hudP2Name.textContent = '对手AI·' + hp2;
     Net.sendAiStart({ p1: hostPickId, p2: clientPickId });
+    // [v211] aistart 补发(与 aips/intermission 同级防丢): 单发在 reliable:false 下可能丢失,
+    //   丢失后 client 不重置血量 → "再来一局血量不重置"。幂等, client 重复收到只是重复 resetMatch。
+    setTimeout(() => { if (Net.isConnected() && game.mode === 'aiHost') Net.sendAiStart({ p1: hostPickId, p2: clientPickId }); }, 400);
+    setTimeout(() => { if (Net.isConnected() && game.mode === 'aiHost') Net.sendAiStart({ p1: hostPickId, p2: clientPickId }); }, 1000);
     showGame();
     game.resetMatch();
     game.start();
@@ -1398,6 +1402,10 @@
   // ===== 更新公告: 点击版本号显示近三次更新(倒序: 最新在前; 每条用短句概括改动, 一点一换行; 每次发版须 prepend 一条真实版本) =====
   // 文案规则: 每条不超过 30 字, 一条一个圆点, 折行不再出点(见 .cl-pt 悬挂缩进)
   const CHANGELOG = [
+    ['v211', [
+      '修复再来一局血量不重置(残留携带血量)',
+      'aistart补发防丢+观战缓冲新局清空'
+    ]],
     ['v210', [
       '修复选完牌不消失,第二轮可继续选',
       '揭晓消息补发+面板状态自愈'
@@ -1781,4 +1789,6 @@
   // ===== 启动 =====
   setStatus('');
   setInterval(updateHUD, 60);
+  // [v211] 调试钩子: 暴露 game 实例供自动化测试/线上排障(只读使用)
+  window.__pma = { game: game, Net: Net };
 })();
