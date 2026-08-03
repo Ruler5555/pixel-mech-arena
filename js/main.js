@@ -186,6 +186,10 @@
     updateNetTags();
     tickPreWarn(); // [v206] 5s 预警倒计时(HUD 60ms 周期驱动)
     ensureCardPanel(); // [v207] 局间牌组轮询兜底(回调断裂时仍能弹出)
+    // [v210] 状态自愈: 已离开决策状态但面板还显示 → 强制关闭(intergo 全丢也不会卡住第二轮)
+    if (aiCardPanel && aiCardPanel.classList.contains('show') && (!game.state || game.state !== 'decision')) {
+      hideCardPanel();
+    }
   }
 
   // ===== [v206] AI 双人对战·局间决策 UI 与流程 =====
@@ -234,9 +238,14 @@
     } catch (e) { /* 轮询兜底异常忽略, 不打断 HUD */ }
   }
   game.onReveal = (picks) => {
-    // host 侧揭晓: 显示揭晓条 + 通知 client 继续
+    // host 侧揭晓: 先关牌库(否则面板一直显示第一轮的牌, 后续决策被 aiDecisionState 卡死)
+    hideCardPanel();
     showRevealBar(picks);
-    Net.sendInterGo(picks);
+    // [v210] intergo 补发 3 次防丢(client 无 intergo 时靠状态自愈兜底, 但补发更直接)
+    const send = () => { try { if (Net.isConnected() && game.mode === 'aiHost') Net.sendInterGo(picks); } catch (e) {} };
+    send();
+    setTimeout(send, 400);
+    setTimeout(send, 1000);
   };
   // 显示 5s 预警倒计时(hook 到 updateHUD 周期: 由 setInterval 驱动)
   function tickPreWarn() {
@@ -1389,6 +1398,10 @@
   // ===== 更新公告: 点击版本号显示近三次更新(倒序: 最新在前; 每条用短句概括改动, 一点一换行; 每次发版须 prepend 一条真实版本) =====
   // 文案规则: 每条不超过 30 字, 一条一个圆点, 折行不再出点(见 .cl-pt 悬挂缩进)
   const CHANGELOG = [
+    ['v210', [
+      '修复选完牌不消失,第二轮可继续选',
+      '揭晓消息补发+面板状态自愈'
+    ]],
     ['v209', [
       '修复AI双人牌库不显示(hidden覆盖show)',
       '修复再来一局血量不重置',
