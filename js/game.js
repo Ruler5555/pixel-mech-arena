@@ -261,13 +261,13 @@ class Game {
     this.localPlayer = (mode === MODES.CLIENT || mode === MODES.AI_CLIENT) ? 2 : 1;
     // [v141] 联机 AI 对战模式专属数值: 血量上限 120、每回合 30s; 其余模式维持 100/60
     // [v206] AI 双人对战新赛制(总血量生死战·一管血 800): 机甲血条本身就是 800 贯穿全场,
-    //   伤害倍率 ×(800/120×0.28≈1.87) 等效模拟器 loss×800×0.28; 局间只回血 15% 不清空。
+    //   伤害保持默认 1 倍(轻击 8/重击 18, 用户实测要求), 节奏=慢磨: 20s 回合掉 ~10%, 7 回合决生死。
     if (mode === MODES.AI_HOST || mode === MODES.AI_CLIENT) {
       this.maxHP = 800;                            // 机甲血 = 总血池(贯穿)
       this.roundTime = 30;
       this.totalHpMax = 800;                       // 冗余: 决策/背水阈值参考
-      this.dmgScale = 0.28;                        // 模拟器缩放(换算成战斗倍率: ×800/120)
-      this.dmgMult = (800 / 120) * 0.28;           // 实装战斗伤害倍率 ≈1.8667
+      this.dmgScale = 0.28;                        // 保留字段(模拟器参考, 实装不用)
+      this.dmgMult = 1;                            // 伤害倍率 = 默认 1 倍(用户要求)
       this.healPct = 0.15;                         // 局间回血(本回合损失的 15%)
       this.roundTimes = [20, 25, 30, 30, 30, 30, 30]; // 前紧后松
       this.maxRounds = 7;

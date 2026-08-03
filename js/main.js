@@ -172,6 +172,7 @@
     }
     updateNetTags();
     tickPreWarn(); // [v206] 5s 预警倒计时(HUD 60ms 周期驱动)
+    ensureCardPanel(); // [v207] 局间牌组轮询兜底(回调断裂时仍能弹出)
   }
 
   // ===== [v206] AI 双人对战·局间决策 UI 与流程 =====
@@ -191,17 +192,34 @@
   game.onDecision = (payload) => {
     if (elAiPreWarn) elAiPreWarn.classList.add('hidden');
     aiDecisionPayload = payload;
-    aiDecisionState = 'pending';
-    aiLocalPick = null;
-    if (game.mode === 'aiHost') {
-      // host 侧: 本地显示(自己为 side 1) + 发 intermission 给 client(补发 3 次防丢: 控制消息走 unreliable 通道)
-      showCardPanel(payload, 1);
-      const send = () => { if (game.state === 'decision') Net.sendIntermission(payload); };
-      send();
-      setTimeout(send, 600);
-      setTimeout(send, 1500);
-    }
+    ensureCardPanel(); // 弹牌组 + 发 intermission(与 updateHUD 轮询双保险)
   };
+  // [v207] 弹牌组(幂等): onDecision 回调与 updateHUD 轮询双保险 —— 真机实测回调链偶发断裂,
+  //   改为每帧从 game.state==='decision' 检测兜底, host 本地与 client 消息两路都能触发
+  function ensureCardPanel() {
+    try {
+      if (!game || !game.totalHpMax) return;
+      if (aiDecisionState === 'picked' || aiDecisionState === 'reveal') return;
+      if (!game.state || game.state !== 'decision') return;
+      const mySide = game.mode === 'aiHost' ? 1 : (game.mode === 'aiClient' ? 2 : 0);
+      if (!mySide) return;
+      let payload = aiDecisionPayload;
+      if (game.mode === 'aiHost') {
+        if (game._decisionPayload) payload = game._decisionPayload();
+        aiDecisionPayload = payload;
+      }
+      if (!payload || !payload.avail1) return; // client 未收到 intermission, 等补发
+      if (aiDecisionState === 'none' && !aiCardPanel.classList.contains('show')) {
+        showCardPanel(payload, mySide);
+        if (game.mode === 'aiHost') {
+          const send = () => { try { if (game.state === 'decision') Net.sendIntermission(payload); } catch (e) {} };
+          send();
+          setTimeout(send, 600);
+          setTimeout(send, 1500);
+        }
+      }
+    } catch (e) { /* 轮询兜底异常忽略, 不打断 HUD */ }
+  }
   game.onReveal = (picks) => {
     // host 侧揭晓: 显示揭晓条 + 通知 client 继续
     showRevealBar(picks);
@@ -1355,6 +1373,10 @@
   // ===== 更新公告: 点击版本号显示近三次更新(倒序: 最新在前; 每条用短句概括改动, 一点一换行; 每次发版须 prepend 一条真实版本) =====
   // 文案规则: 每条不超过 30 字, 一条一个圆点, 折行不再出点(见 .cl-pt 悬挂缩进)
   const CHANGELOG = [
+    ['v207', [
+      'AI双人伤害恢复默认倍率,慢磨更持久',
+      '选牌弹出加轮询兜底,双端必弹'
+    ]],
     ['v206', [
       'AI双人改一管血800贯穿,局间只回血15%',
       '修复选牌弹出:决策消息补发防丢',
