@@ -263,9 +263,9 @@ class Game {
     // [v206] AI 双人对战新赛制(总血量生死战·一管血 800): 机甲血条本身就是 800 贯穿全场,
     //   伤害保持默认 1 倍(轻击 8/重击 18, 用户实测要求), 节奏=慢磨: 20s 回合掉 ~10%, 7 回合决生死。
     if (mode === MODES.AI_HOST || mode === MODES.AI_CLIENT) {
-      this.maxHP = 800;                            // 机甲血 = 总血池(贯穿)
+      this.maxHP = 1000;                           // 机甲血 = 总血池(贯穿, v208 用户调至 1000)
       this.roundTime = 30;
-      this.totalHpMax = 800;                       // 冗余: 决策/背水阈值参考
+      this.totalHpMax = 1000;                      // 冗余: 决策/背水阈值参考
       this.dmgScale = 0.28;                        // 保留字段(模拟器参考, 实装不用)
       this.dmgMult = 1;                            // 伤害倍率 = 默认 1 倍(用户要求)
       this.healPct = 0.15;                         // 局间回血(本回合损失的 15%)
@@ -474,6 +474,18 @@ class Game {
     // 揭晓回调(main.js 显示 2s 揭晓条)
     if (this.onReveal) this.onReveal(this.decisionPicks);
     this.decisionRevealTimer = 2.0;
+    // [v208] 保险: 揭晓 2s 后继续下一回合(不依赖 update 持续运行)
+    if (this._revealTimer) clearTimeout(this._revealTimer);
+    this._revealTimer = setTimeout(() => {
+      try {
+        if (this.state === STATES.DECISION && !this.awaitingDecision) {
+          this.decisionPicks = null;
+          this.decisionDone = 0;
+          this.round++;
+          this.startRound();
+        }
+      } catch (e) {}
+    }, 2200);
   }
 
   setState(s) {
@@ -635,6 +647,18 @@ class Game {
             else { this.suddenDeath = true; this.setState(STATES.ROUND_END); } // 同血 → 骤死
           }
           else this.setState(STATES.ROUND_END); // 正常进入结算 + 局间决策
+          // [v208] 保险: setTimeout 兜底 ROUND_END → DECISION(真机 stateTime 累积异常/update 抖动时也能推进)
+          if (this._roundEndTimer) clearTimeout(this._roundEndTimer);
+          this._roundEndTimer = setTimeout(() => {
+            try {
+              if (this.state === STATES.ROUND_END && this.mode === MODES.AI_HOST && this.totalHpMax && !this.suddenDeath) {
+                this.decisionTimer = this.decisionMax;
+                this.awaitingDecision = true;
+                this.setState(STATES.DECISION);
+                if (this.onDecision) this.onDecision(this._decisionPayload());
+              }
+            } catch (e) {}
+          }, 2400);
         } else {
           let winner = 0;
           if (p1Dead && !p2Dead) winner = 2;
@@ -671,6 +695,16 @@ class Game {
             this.awaitingDecision = true;
             this.setState(STATES.DECISION);
             if (this.onDecision) this.onDecision(this._decisionPayload());
+            // [v208] 保险: DECISION 超时(10.5s)兜底跳过 —— 不依赖 update 持续运行
+            if (this._decisionTimeout) clearTimeout(this._decisionTimeout);
+            this._decisionTimeout = setTimeout(() => {
+              try {
+                if (this.state === STATES.DECISION && this.awaitingDecision) {
+                  this.applyDecision(null, 1);
+                  this.applyDecision(null, 2);
+                }
+              } catch (e) {}
+            }, 10500);
           }
         } else {
           if (this.winsP1 >= 2 || this.winsP2 >= 2) this.setState(STATES.MATCH_END);

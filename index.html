@@ -15,7 +15,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" media="print" onload="this.media='all'">
 <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap"></noscript>
-<link rel="stylesheet" href="css/style.css?v=207">
+<link rel="stylesheet" href="css/style.css?v=208">
 </head>
 <body>
 <div id="app">
@@ -23,7 +23,7 @@
   <!-- ===== 全局常驻边缘: 规则 + 版本号(所有界面可见, 不滚动即可见) ===== -->
   <div id="persistEdge">
     <button id="rulesBtn" class="edge-btn" aria-label="游戏规则">规则?</button>
-    <span id="versionTag" class="version-tag">v207</span>
+    <span id="versionTag" class="version-tag">v208</span>
   </div>
 
   <!-- ===== 登录界面 ===== -->
@@ -258,6 +258,8 @@
         <div class="net-status" id="netStatus">●</div>
         <!-- [v206] AI 双人对战新赛制: 总血池贯穿 HUD(非 AI 模式隐藏) -->
         <div class="total-hp" id="aiTotalHp" hidden></div>
+        <!-- [v208] 诊断条: AI 对局中显示状态机, 排障用(用户截图反馈) -->
+        <div class="ai-dbg" id="aiDbg" hidden></div>
       </div>
       <div class="player-hud right">
         <div class="name"><span class="role" id="roleP2">AI</span> <span id="hudP2Name">RED-X</span></div>
@@ -362,16 +364,16 @@
 </div>
 
 <!-- 所有脚本加 defer: 并行下载、按序执行、不阻塞首屏 DOM 解析; 加快首屏可点 -->
-<script defer src="vendor/peerjs.min.js?v=207"></script>
-<script defer src="vendor/mqtt.min.js?v=207"></script>
-<script defer src="js/auth.js?v=207"></script>
-<script defer src="js/world.js?v=207"></script>
-<script defer src="js/input.js?v=207"></script>
-<script defer src="js/touch.js?v=207"></script>
-<script defer src="js/sprite.js?v=207"></script>
-<script defer src="js/player.js?v=207"></script>
-<script defer src="js/net.js?v=207"></script>
-<script defer src="js/game.js?v=207"></script>
-<script defer src="js/main.js?v=207"></script>
+<script defer src="vendor/peerjs.min.js?v=208"></script>
+<script defer src="vendor/mqtt.min.js?v=208"></script>
+<script defer src="js/auth.js?v=208"></script>
+<script defer src="js/world.js?v=208"></script>
+<script defer src="js/input.js?v=208"></script>
+<script defer src="js/touch.js?v=208"></script>
+<script defer src="js/sprite.js?v=208"></script>
+<script defer src="js/player.js?v=208"></script>
+<script defer src="js/net.js?v=208"></script>
+<script defer src="js/game.js?v=208"></script>
+<script defer src="js/main.js?v=208"></script>
 </body>
 </html>
