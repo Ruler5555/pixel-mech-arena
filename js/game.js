@@ -485,8 +485,17 @@ class Game {
       // [v212] 药水改即时回血: 选完立刻回 20% 最大血(用户实测"选了没生效"——
       //   原实现是"下回合结算时回血比例+30%", 依赖下回合掉血且结算公式难感知)
       const heal = Math.round(this.maxHP * 0.20);
-      if (s) { cs.potionN = (cs.potionN || 0) + 1; this.p1.hp = Math.min(this.maxHP, this.p1.hp + heal); }
-      else   { cs.potionN2 = (cs.potionN2 || 0) + 1; this.p2.hp = Math.min(this.maxHP, this.p2.hp + heal); }
+      if (s) {
+        cs.potionN = (cs.potionN || 0) + 1;
+        this.p1.hp = Math.min(this.maxHP, this.p1.hp + heal);
+        // [v215] 关键: 药水回血必须同步进 _carryHp —— 否则回合开始 startRound 用
+        //   (仅含 15% 回血的)carry 覆盖机甲血, 药水 20% 被"刷新"掉(用户实测 bug)
+        if (this._carryHp1 !== undefined) this._carryHp1 = Math.min(this.maxHP, this._carryHp1 + heal);
+      } else {
+        cs.potionN2 = (cs.potionN2 || 0) + 1;
+        this.p2.hp = Math.min(this.maxHP, this.p2.hp + heal);
+        if (this._carryHp2 !== undefined) this._carryHp2 = Math.min(this.maxHP, this._carryHp2 + heal);
+      }
       // 药水回血也要同步观战端: 记入 roundStartHp 会导致结算双算, 直接置"本回合已消耗标记"由 state 广播
       this._potionFlash = (this._potionFlash || 0) + 1; // 触发揭晓条附注(仅权威端)
     }
