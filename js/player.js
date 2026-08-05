@@ -42,7 +42,8 @@ class Mech {
 
     // 防御
     this.defending = false;
-    this.defendCD = 0;   // 再防冷却: 松手后 0.5s 内不能再次举盾
+    this.defendCD = 0;   // 再防冷却: 松手后 1s 内不能再次举盾 [v217 0.5→1]
+    this.defendTime = 0; // [v217] 连续举盾时长: 满 3s 强制停止并进入 1s 冷却
 
     // 攻击冷却(避免连点)
     this.cooldown = 0;
@@ -170,7 +171,7 @@ class Mech {
       if (ctrl.tapL && this.onGround && !attacking) { if (this.startAttack('L')) attacking = true; }
       else if (ctrl.tapH && this.onGround && !attacking) { if (this.startAttack('H')) attacking = true; }
 
-      // 防御(按住) — 攻击中不能切防御; 松手后进入 0.5s 再防冷却
+      // 防御(按住) — 攻击中不能切防御; 松手后进入 1s 再防冷却 [v217 0.5→1]
       wantDefend = ctrl.defend && !attacking && this.onGround && this.defendCD <= 0;
 
       // 移动(防御/攻击中不能移动)
@@ -213,10 +214,23 @@ class Mech {
       }
     }
 
-    // 防御结果落地: 松开(本次未保持)→ 记 0.5s 再防冷却, 防无限举盾
-    if (wasDefending && !wantDefend && this.defendCD <= 0) this.defendCD = 0.5;
+    // 防御结果落地: 松开(本次未保持)→ 记 1s 再防冷却, 防无限举盾 [v217 0.5→1]
+    if (wasDefending && !wantDefend && this.defendCD <= 0) this.defendCD = 1;
     this.defending = wantDefend;
     if (this.defending) this.setState('defend');
+    else if (wasDefending) this.setState('idle'); // 松手: 立即切回站立, 盾消失可见
+    // [v217] 举盾时长: 按"本帧是否举盾"累积(第一帧举起即开始计时), 满 3s 强制停止 + 1s 冷却
+    if (this.defending) {
+      this.defendTime += dt;
+      if (this.defendTime >= 3) {
+        this.defending = false;
+        this.defendCD = 1;
+        this.defendTime = 0;
+        this.setState('idle'); // 强制停止: 盾立即消失, 玩家可见"盾破"
+      }
+    } else {
+      this.defendTime = 0;
+    }
 
     // 朝向: 始终面向对手(非攻击/移动时)
     if (!attacking && !hurt && !dead && this.onGround && !this.defending) {
