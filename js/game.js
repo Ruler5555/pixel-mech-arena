@@ -256,7 +256,7 @@ class Game {
   }
 
   // ===== 模式设置 =====
-  setMode(mode) {
+  setMode(mode, hp) {
     this.mode = mode;
     this.localPlayer = (mode === MODES.CLIENT || mode === MODES.AI_CLIENT) ? 2 : 1;
     // [v141] 联机 AI 对战模式专属数值: 血量上限 120、每回合 30s; 其余模式维持 100/60
@@ -272,7 +272,8 @@ class Game {
       this.roundTimes = [20, 25, 30, 30, 30, 30, 30]; // 前紧后松
       this.maxRounds = 7;
     } else {
-      this.maxHP = 100;
+      // [v218] 脆皮模式: host/client 传 hp=15, 轻击两下/重击一下致命, BO3 60s(其余沿用 PvP)
+      this.maxHP = (hp && hp > 0) ? hp : 100;
       this.roundTime = 60;
       this.totalHpMax = null;
       this.dmgScale = 1;

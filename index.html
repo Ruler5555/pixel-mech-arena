@@ -15,7 +15,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" media="print" onload="this.media='all'">
 <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap"></noscript>
-<link rel="stylesheet" href="css/style.css?v=217">
+<link rel="stylesheet" href="css/style.css?v=218">
 </head>
 <body>
 <div id="app">
@@ -23,7 +23,7 @@
   <!-- ===== 全局常驻边缘: 规则 + 版本号(所有界面可见, 不滚动即可见) ===== -->
   <div id="persistEdge">
     <button id="rulesBtn" class="edge-btn" aria-label="游戏规则">规则?</button>
-    <span id="versionTag" class="version-tag">v217</span>
+    <span id="versionTag" class="version-tag">v218</span>
   </div>
 
   <!-- ===== 登录界面 ===== -->
@@ -182,6 +182,14 @@
           <span class="hb-sub">各自训练机甲 AI · 观战自动对打</span>
         </span>
       </button>
+      <!-- [v218] 脆皮模式: PvP 规则 + 血量 15(轻击两下/重击一下致命) -->
+      <button id="btnOnlineModeGlass" class="ms-mode-btn glass">
+        <span class="ms-mode-ico">💥</span>
+        <span class="ms-mode-txt">
+          <span class="hb-txt">脆皮模式</span>
+          <span class="hb-sub">双方 15 血 · 一击定生死</span>
+        </span>
+      </button>
       <div class="ms-placeholder">更多联机玩法敬请期待</div>
     </div>
   </div>
@@ -331,6 +339,7 @@
         <p>· 血量上限 100,显示在各自血条下方,受击后实时更新</p>
         <p>· 轻击:伤害 8,出手快后摇短;重击:伤害 18,出手慢,破防惩罚强</p>
         <p>· 防御:减伤 90% 并反弹 60% 伤害给攻击者,但防御时不能移动;最多连续举盾 3 秒,盾破后需等 1 秒才能再次防御</p>
+        <p class="rules-glass">💥 脆皮模式:双方血量只有 15——轻击两下死,重击一下死;防御反弹 60% 让进攻本身就是赌注;BO3</p>
         <p>· 二段跳可空中走位,但空中不能攻击</p>
         <p>· 键盘: A/D 移动 · W 跳 · J 轻击 · K 重击 · L 防御</p>
         <p>· 移动端: 左下方向滑杆,右下 轻击/重击/防御/跳跃</p>
@@ -362,16 +371,16 @@
 </div>
 
 <!-- 所有脚本加 defer: 并行下载、按序执行、不阻塞首屏 DOM 解析; 加快首屏可点 -->
-<script defer src="vendor/peerjs.min.js?v=217"></script>
-<script defer src="vendor/mqtt.min.js?v=217"></script>
-<script defer src="js/auth.js?v=217"></script>
-<script defer src="js/world.js?v=217"></script>
-<script defer src="js/input.js?v=217"></script>
-<script defer src="js/touch.js?v=217"></script>
-<script defer src="js/sprite.js?v=217"></script>
-<script defer src="js/player.js?v=217"></script>
-<script defer src="js/net.js?v=217"></script>
-<script defer src="js/game.js?v=217"></script>
-<script defer src="js/main.js?v=217"></script>
+<script defer src="vendor/peerjs.min.js?v=218"></script>
+<script defer src="vendor/mqtt.min.js?v=218"></script>
+<script defer src="js/auth.js?v=218"></script>
+<script defer src="js/world.js?v=218"></script>
+<script defer src="js/input.js?v=218"></script>
+<script defer src="js/touch.js?v=218"></script>
+<script defer src="js/sprite.js?v=218"></script>
+<script defer src="js/player.js?v=218"></script>
+<script defer src="js/net.js?v=218"></script>
+<script defer src="js/game.js?v=218"></script>
+<script defer src="js/main.js?v=218"></script>
 </body>
 </html>

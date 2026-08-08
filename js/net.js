@@ -356,7 +356,7 @@ const Net = (() => {
     else if (msg.t === 'input') emit('input', msg.c);
     else if (msg.t === 'bye') emit('close');
     else if (msg.t === 'reset') emit('reset');
-    else if (msg.t === 'start') emit('start');
+    else if (msg.t === 'start') emit('start', msg.m || 0);
     else if (msg.t === 'rmt') emit('rematchReady');
     else if (msg.t === 'aimode') emit('aimode');
     else if (msg.t === 'aipick') emit('aipick', msg.id);
@@ -473,7 +473,7 @@ const Net = (() => {
   function sendInput(c) { send({ t: 'input', c }); }
   function sendReset() { send({ t: 'reset' }); }
   function sendBye() { send({ t: 'bye' }); }
-  function sendStart() { send({ t: 'start' }); }
+  function sendStart(mode) { send({ t: 'start', m: mode || 0 }); } // [v218] m>0 = 自定义血量(脆皮 15)
   function sendRematchReady() { send({ t: 'rmt' }); }
   // ===== AI 对战观战模式专用消息 =====
   function sendAiMode() { send({ t: 'aimode' }); }

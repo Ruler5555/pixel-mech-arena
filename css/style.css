@@ -676,6 +676,9 @@ button:active:not(:disabled) { transform: translateY(2px); }
 /* AI 对战入口按钮(区别于双人对战的蓝色) */
 .ms-mode-btn.ai { border-color: #6f5bd6; box-shadow: 0 0 0 2px #6f5bd6, 0 4px 0 var(--border); }
 .ms-mode-btn.ai .hb-txt { color: #b9a8ff; }
+/* [v218] 脆皮模式入口按钮(红橙高危配色, 呼应一击定生死) */
+.ms-mode-btn.glass { border-color: #d85a30; box-shadow: 0 0 0 2px #d85a30, 0 4px 0 var(--border); }
+.ms-mode-btn.glass .hb-txt { color: #f0997b; }
 
 /* ===== AI 对战 · 选风格屏 ===== */
 .ai-pick-tip {

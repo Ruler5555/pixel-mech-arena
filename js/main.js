@@ -58,6 +58,7 @@
   const btnOnlineModeBack = document.getElementById('btnOnlineModeBack');
   const btnOnlineModePvP = document.getElementById('btnOnlineModePvP');
   const btnOnlineModeAIvAI = document.getElementById('btnOnlineModeAIvAI');
+  const btnOnlineModeGlass = document.getElementById('btnOnlineModeGlass'); // [v218] 脆皮模式
 
   // ===== DOM: [v206] AI 新赛制 UI(总血池/5s预警/揭晓/局间牌组) =====
   const elAiTotalHp = document.getElementById('aiTotalHp');
@@ -719,7 +720,7 @@
       showOverlay('正在建立对局通道', '对手已进房, P2P 直连通道建立中...\n\n请稍候几秒再点「开始对战」\n(对局数据仅走直连通道, 不会走中继)', '', { cancelable: true, cancelLabel: '返回大厅' });
       return;
     }
-    Net.sendStart(); // 通知 client 开始
+    Net.sendStart(roomMode === 'glass' ? 15 : 0); // [v218] 脆皮: start 携带血量, client 据此 setMode
     showGame();
     game.resetMatch();
     game.start();
@@ -998,6 +999,12 @@
     roomMode = 'ai';
     startHost('ai').finally(() => { btnOnlineModeAIvAI.disabled = false; });
   });
+  // [v218] 脆皮模式: PvP 规则 + 血量 15(轻击两下/重击一下致命)
+  if (btnOnlineModeGlass) btnOnlineModeGlass.addEventListener('click', () => {
+    btnOnlineModeGlass.disabled = true;
+    roomMode = 'glass';
+    startHost('glass').finally(() => { btnOnlineModeGlass.disabled = false; });
+  });
   if (aiPickExitBtn) aiPickExitBtn.addEventListener('click', () => {
     // host: 返回 = 退回等待大厅(房间与连接都保留, 可以反悔重选), 并通知 client 一起退回等待
     if (myRole === 'host' && Net.isConnected()) {
@@ -1136,7 +1143,8 @@
     bindNetEvents(); // 先绑定事件, 再连接
     try {
       const code = await Net.hostRoom();
-      game.setMode('host');
+      // [v218] 脆皮模式: host 血量 15(client 由 start 消息携带同步)
+      game.setMode('host', roomMode === 'glass' ? 15 : 0);
       // [v115 修正] 两种玩法都先进等待大厅显示房号 —— AI 对战原先直接跳选风格屏,
       // 导致房号根本不露面, 对手无从加入(用户实测"根本没法联机"的根因)
       roleP1.textContent = roomMode === 'ai' ? '你的AI' : '你';
@@ -1278,9 +1286,10 @@
         slotP1Name.textContent = oppName;
       }
     });
-    // host 发来 start 信号: client 开始对战
-    Net.on('start', () => {
+    // host 发来 start 信号: client 开始对战(m>0 = 脆皮模式自定义血量)
+    Net.on('start', (m) => {
       if (game.mode === 'client') {
+        if (m && m > 0) game.setMode('client', m); // [v218] 脆皮: 血量 15
         hideOverlay();
         showGame();
         game.resetMatch();
@@ -1403,6 +1412,10 @@
   // ===== 更新公告: 点击版本号显示近三次更新(倒序: 最新在前; 每条用短句概括改动, 一点一换行; 每次发版须 prepend 一条真实版本) =====
   // 文案规则: 每条不超过 30 字, 一条一个圆点, 折行不再出点(见 .cl-pt 悬挂缩进)
   const CHANGELOG = [
+    ['v218', [
+      '新增脆皮模式:双方仅15血,轻击两下重击一下致命',
+      '联机玩法选择屏新增入口,规则同步'
+    ]],
     ['v217', [
       '防御:冷却提至1秒,最多举盾3秒自动破盾',
       '破盾后需等1秒才能再次防御(防龟壳)'
